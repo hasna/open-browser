@@ -1,7 +1,11 @@
 #!/usr/bin/env bun
 
 import { Command } from "commander";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import chalk from "chalk";
+
+const pkg = JSON.parse(readFileSync(join(import.meta.dir, "../../package.json"), "utf8"));
 import { createSession, closeSession, listSessions, getSessionPage } from "../lib/session.js";
 import { navigate, click, type as typeText, scroll } from "../lib/actions.js";
 import { getText, getLinks, extract } from "../lib/extractor.js";
@@ -19,7 +23,7 @@ const program = new Command();
 program
   .name("browser")
   .description("@hasna/browser — general-purpose browser agent CLI")
-  .version("0.0.1");
+  .version(pkg.version);
 
 // ─── navigate ─────────────────────────────────────────────────────────────────
 

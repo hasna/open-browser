@@ -162,9 +162,9 @@ describe("CLI — version flag", () => {
   beforeEach(setupDb);
   afterEach(teardownDb);
 
-  it("--version shows 0.0.1", async () => {
+  it("--version shows current version from package.json", async () => {
     const { stdout, code } = await runCli("--version");
     expect(code).toBe(0);
-    expect(stdout.trim()).toContain("0.0.1");
+    expect(stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/);
   });
 });

@@ -69,9 +69,13 @@ export interface SessionOptions {
   projectId?: string;
   agentId?: string;
   startUrl?: string;
+  name?: string;
   headless?: boolean;
   viewport?: { width: number; height: number };
   userAgent?: string;
+  captureNetwork?: boolean;  // default: true — auto-enable network logging
+  captureConsole?: boolean;  // default: true — auto-enable console capture
+  stealth?: boolean;         // default: false — apply anti-detection patches
 }
 
 // ─── Snapshot ────────────────────────────────────────────────────────────────
@@ -388,6 +392,32 @@ export interface PDFResult {
   base64: string;
   size_bytes: number;
   page_count?: number;
+}
+
+// ─── Snapshot (Accessibility Tree with Refs) ─────────────────────────────────
+
+export interface RefInfo {
+  role: string;
+  name: string;
+  description?: string;
+  visible: boolean;
+  enabled: boolean;
+  value?: string;
+  checked?: boolean;
+}
+
+export interface SnapshotResult {
+  tree: string;
+  refs: Record<string, RefInfo>;
+  interactive_count: number;
+}
+
+export interface SnapshotDiff {
+  added: Array<{ ref: string; info: RefInfo }>;
+  removed: Array<{ ref: string; info: RefInfo }>;
+  modified: Array<{ ref: string; before: RefInfo; after: RefInfo }>;
+  url_changed: boolean;
+  title_changed: boolean;
 }
 
 // ─── Config ──────────────────────────────────────────────────────────────────

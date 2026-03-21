@@ -1,5 +1,6 @@
 import type { Page } from "playwright";
 import { BrowserError, ElementNotFoundError, NavigationError } from "../types/index.js";
+import { getRefLocator } from "./snapshot.js";
 
 export interface ClickOptions {
   button?: "left" | "right" | "middle";
@@ -348,5 +349,104 @@ export function stopWatch(watchId: string): void {
   if (w) {
     clearInterval(w.interval);
     activeWatches.delete(watchId);
+  }
+}
+
+// ─── Ref-based actions ────────────────────────────────────────────────────────
+
+export async function clickRef(
+  page: Page,
+  sessionId: string,
+  ref: string,
+  opts?: { timeout?: number }
+): Promise<void> {
+  try {
+    const locator = getRefLocator(page, sessionId, ref);
+    await locator.click({ timeout: opts?.timeout ?? 10000 });
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("Ref ")) throw new ElementNotFoundError(ref);
+    if (err instanceof Error && err.message.includes("No snapshot")) throw new BrowserError(err.message, "NO_SNAPSHOT");
+    throw new BrowserError(`clickRef ${ref} failed: ${err instanceof Error ? err.message : String(err)}`, "CLICK_REF_FAILED");
+  }
+}
+
+export async function typeRef(
+  page: Page,
+  sessionId: string,
+  ref: string,
+  text: string,
+  opts?: { delay?: number; clear?: boolean; timeout?: number }
+): Promise<void> {
+  try {
+    const locator = getRefLocator(page, sessionId, ref);
+    if (opts?.clear) await locator.fill("", { timeout: opts.timeout ?? 10000 });
+    await locator.pressSequentially(text, { delay: opts?.delay, timeout: opts?.timeout ?? 10000 });
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("Ref ")) throw new ElementNotFoundError(ref);
+    throw new BrowserError(`typeRef ${ref} failed: ${err instanceof Error ? err.message : String(err)}`, "TYPE_REF_FAILED");
+  }
+}
+
+export async function fillRef(
+  page: Page,
+  sessionId: string,
+  ref: string,
+  value: string,
+  timeout = 10000
+): Promise<void> {
+  try {
+    const locator = getRefLocator(page, sessionId, ref);
+    await locator.fill(value, { timeout });
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("Ref ")) throw new ElementNotFoundError(ref);
+    throw new BrowserError(`fillRef ${ref} failed: ${err instanceof Error ? err.message : String(err)}`, "FILL_REF_FAILED");
+  }
+}
+
+export async function selectRef(
+  page: Page,
+  sessionId: string,
+  ref: string,
+  value: string,
+  timeout = 10000
+): Promise<string[]> {
+  try {
+    const locator = getRefLocator(page, sessionId, ref);
+    return await locator.selectOption(value, { timeout });
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("Ref ")) throw new ElementNotFoundError(ref);
+    throw new BrowserError(`selectRef ${ref} failed: ${err instanceof Error ? err.message : String(err)}`, "SELECT_REF_FAILED");
+  }
+}
+
+export async function checkRef(
+  page: Page,
+  sessionId: string,
+  ref: string,
+  checked: boolean,
+  timeout = 10000
+): Promise<void> {
+  try {
+    const locator = getRefLocator(page, sessionId, ref);
+    if (checked) await locator.check({ timeout });
+    else await locator.uncheck({ timeout });
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("Ref ")) throw new ElementNotFoundError(ref);
+    throw new BrowserError(`checkRef ${ref} failed: ${err instanceof Error ? err.message : String(err)}`, "CHECK_REF_FAILED");
+  }
+}
+
+export async function hoverRef(
+  page: Page,
+  sessionId: string,
+  ref: string,
+  timeout = 10000
+): Promise<void> {
+  try {
+    const locator = getRefLocator(page, sessionId, ref);
+    await locator.hover({ timeout });
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("Ref ")) throw new ElementNotFoundError(ref);
+    throw new BrowserError(`hoverRef ${ref} failed: ${err instanceof Error ? err.message : String(err)}`, "HOVER_REF_FAILED");
   }
 }

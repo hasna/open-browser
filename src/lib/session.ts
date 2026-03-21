@@ -6,6 +6,10 @@ import { createSession as dbCreateSession, getSession as dbGetSession, listSessi
 import { launchPlaywright, getPage as getPlaywrightPage, closeBrowser as closePlaywrightBrowser } from "../engines/playwright.js";
 import { connectLightpanda } from "../engines/lightpanda.js";
 import { selectEngine } from "../engines/selector.js";
+import { enableNetworkLogging } from "./network.js";
+import { enableConsoleCapture } from "./console.js";
+import { applyStealthPatches } from "./stealth.js";
+import { setupDialogHandler } from "./dialogs.js";
 
 // ─── In-memory handle store ───────────────────────────────────────────────────
 
@@ -13,6 +17,8 @@ interface SessionHandle {
   browser: Browser;
   page: Page;
   engine: BrowserEngine;
+  cleanups: Array<() => void>;
+  tokenBudget: { total: number; used: number };
 }
 
 const handles = new Map<string, SessionHandle>();
@@ -56,14 +62,32 @@ export async function createSession(opts: SessionOptions = {}): Promise<CreateSe
     projectId: opts.projectId,
     agentId: opts.agentId,
     startUrl: opts.startUrl,
+    name: opts.name ?? (opts.startUrl ? new URL(opts.startUrl).hostname : undefined),
   });
 
-  handles.set(session.id, { browser, page, engine: resolvedEngine });
+  // Apply stealth patches if requested (before any navigation)
+  if (opts.stealth) {
+    try { await applyStealthPatches(page); } catch {}
+  }
+
+  // Auto-attach network + console logging
+  const cleanups: Array<() => void> = [];
+  if (opts.captureNetwork !== false) {
+    try { cleanups.push(enableNetworkLogging(page, session.id)); } catch {}
+  }
+  if (opts.captureConsole !== false) {
+    try { cleanups.push(enableConsoleCapture(page, session.id)); } catch {}
+  }
+
+  // Auto-attach dialog handler
+  try { cleanups.push(setupDialogHandler(page, session.id)); } catch {}
+
+  handles.set(session.id, { browser, page, engine: resolvedEngine, cleanups, tokenBudget: { total: 0, used: 0 } });
 
   if (opts.startUrl) {
     try {
       await page.goto(opts.startUrl, { waitUntil: "domcontentloaded" });
-    } catch (err) {
+    } catch {
       // Non-fatal: session still created
     }
   }
@@ -74,6 +98,13 @@ export async function createSession(opts: SessionOptions = {}): Promise<CreateSe
 export function getSessionPage(sessionId: string): Page {
   const handle = handles.get(sessionId);
   if (!handle) throw new SessionNotFoundError(sessionId);
+  // Health check: verify the page is still usable (catches stale sessions after MCP recycle)
+  try {
+    handle.page.url(); // throws if browser/context is closed
+  } catch {
+    handles.delete(sessionId);
+    throw new SessionNotFoundError(sessionId);
+  }
   return handle.page;
 }
 
@@ -93,9 +124,19 @@ export function hasActiveHandle(sessionId: string): boolean {
   return handles.has(sessionId);
 }
 
+export function setSessionPage(sessionId: string, page: Page): void {
+  const handle = handles.get(sessionId);
+  if (!handle) throw new SessionNotFoundError(sessionId);
+  handle.page = page;
+}
+
 export async function closeSession(sessionId: string): Promise<Session> {
   const handle = handles.get(sessionId);
   if (handle) {
+    // Run cleanup functions (network/console listeners)
+    for (const cleanup of handle.cleanups) {
+      try { cleanup(); } catch {}
+    }
     try {
       await handle.page.context().close();
     } catch {}
@@ -131,4 +172,9 @@ export function getSessionByName(name: string) {
 
 export function renameSession(id: string, name: string) {
   return dbRenameSession(id, name);
+}
+
+export function getTokenBudget(sessionId: string): { total: number; used: number } | null {
+  const handle = handles.get(sessionId);
+  return handle ? handle.tokenBudget : null;
 }
