@@ -685,6 +685,123 @@ program
     if (!opts.headed) await closeSession(session.id);
   });
 
+// ─── script (login scripts with connector integration) ─────────────────────
+
+const scriptCmd = program.command("script").description("Manage login scripts (browser + connector workflows)");
+
+scriptCmd
+  .command("run <name>")
+  .description("Run a saved login script")
+  .option("--email <email>", "Override email variable")
+  .option("--engine <engine>", "Browser engine", "auto")
+  .option("--headed", "Run in headed (visible) mode")
+  .option("--json", "Output as JSON")
+  .option("--var <pairs...>", "Set variables (key=value)")
+  .action(async (name: string, opts: { email?: string; engine: string; headed?: boolean; json?: boolean; var?: string[] }) => {
+    const { loadScript, runScript } = await import("../lib/login-scripts.js");
+    const script = loadScript(name);
+    if (!script) {
+      console.log(chalk.red(`Script '${name}' not found. Use 'browser script list' to see available scripts.`));
+      return;
+    }
+
+    const { session, page } = await createSession({ engine: opts.engine as BrowserEngine, headless: !opts.headed });
+
+    const overrides: Record<string, string> = {};
+    if (opts.email) overrides.email = opts.email;
+    if (opts.var) {
+      for (const pair of opts.var) {
+        const [k, ...v] = pair.split("=");
+        if (k) overrides[k] = v.join("=");
+      }
+    }
+
+    if (!opts.json) {
+      console.log(chalk.gray(`Running script: ${script.name} (${script.steps.length} steps)`));
+      console.log(chalk.gray(`  Domain: ${script.domain}`));
+      if (script.description) console.log(chalk.gray(`  ${script.description}\n`));
+    }
+
+    const result = await runScript(script, page, overrides);
+
+    if (opts.json) {
+      console.log(JSON.stringify({ ...result, session_id: session.id }));
+    } else {
+      if (result.success) {
+        console.log(chalk.green(`\n✓ Script completed (${result.steps_executed} steps, ${result.duration_ms}ms)`));
+      } else {
+        console.log(chalk.red(`\n✗ Script failed (${result.steps_failed}/${result.steps_executed} steps failed)`));
+        result.errors.forEach(e => console.log(chalk.red(`  ${e}`)));
+      }
+      console.log(chalk.gray(`  Session: ${session.id}`));
+      console.log(chalk.gray(`  URL: ${result.variables.current_url ?? page.url()}`));
+    }
+
+    if (!opts.headed) await closeSession(session.id);
+  });
+
+scriptCmd
+  .command("list")
+  .description("List saved login scripts")
+  .option("--json", "Output as JSON")
+  .action(async (opts: { json?: boolean }) => {
+    const { listScripts } = await import("../lib/login-scripts.js");
+    const scripts = listScripts();
+    if (opts.json) {
+      console.log(JSON.stringify(scripts, null, 2));
+    } else if (scripts.length === 0) {
+      console.log(chalk.gray("No scripts saved. Create one with 'browser script create-usestable'"));
+    } else {
+      scripts.forEach(s => {
+        console.log(`${chalk.bold(s.name)} ${chalk.gray(`(${s.domain})`)} — ${s.steps} steps`);
+        if (s.description) console.log(chalk.gray(`  ${s.description}`));
+      });
+    }
+  });
+
+scriptCmd
+  .command("create-usestable")
+  .description("Create the usestable.com login script (magic link via Gmail)")
+  .option("--email <email>", "Email address", "andrei@hasna.com")
+  .action(async (opts: { email: string }) => {
+    const { createUsestableScript, saveScript } = await import("../lib/login-scripts.js");
+    const script = createUsestableScript(opts.email);
+    const path = saveScript(script);
+    console.log(chalk.green(`✓ Script saved: ${script.name}`));
+    console.log(chalk.gray(`  Path: ${path}`));
+    console.log(chalk.gray(`  Steps: ${script.steps.length}`));
+    console.log(chalk.gray(`  Run with: browser script run usestable`));
+  });
+
+scriptCmd
+  .command("show <name>")
+  .description("Show script details")
+  .action(async (name: string) => {
+    const { loadScript } = await import("../lib/login-scripts.js");
+    const script = loadScript(name);
+    if (!script) { console.log(chalk.red(`Script '${name}' not found`)); return; }
+    console.log(chalk.bold(`${script.name} (${script.domain})\n`));
+    if (script.description) console.log(chalk.gray(`  ${script.description}\n`));
+    console.log(chalk.gray(`  Variables: ${Object.keys(script.variables).join(", ")}\n`));
+    script.steps.forEach((s, i) => {
+      const desc = s.description ?? `${s.type}${s.action ? `:${s.action}` : ""}${s.connector ? `:${s.connector}` : ""}`;
+      const detail = s.url ?? s.selector ?? s.text ?? s.connector ?? s.pattern ?? "";
+      console.log(`  ${chalk.cyan(`${i + 1}.`)} [${s.type}] ${desc} ${chalk.gray(detail.slice(0, 60))}`);
+    });
+  });
+
+scriptCmd
+  .command("delete <name>")
+  .description("Delete a saved script")
+  .action(async (name: string) => {
+    const { deleteScript } = await import("../lib/login-scripts.js");
+    if (deleteScript(name)) {
+      console.log(chalk.green(`✓ Script deleted: ${name}`));
+    } else {
+      console.log(chalk.red(`Script '${name}' not found`));
+    }
+  });
+
 // ─── install-browser ──────────────────────────────────────────────────────────
 
 program

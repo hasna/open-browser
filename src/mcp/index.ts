@@ -2326,6 +2326,77 @@ server.tool(
   }
 );
 
+// ── Login Scripts (browser + connector workflows) ────────────────────────────
+
+server.tool(
+  "browser_script_run",
+  "Run a saved login script — multi-step workflow combining browser actions + connector calls (e.g. magic link login via Gmail). One command, fully automated.",
+  {
+    name: z.string().describe("Script name (e.g. 'usestable')"),
+    session_id: z.string().optional(),
+    variables: z.record(z.string()).optional().describe("Override script variables (e.g. {email: 'foo@bar.com'})"),
+  },
+  async ({ name, session_id, variables }) => {
+    try {
+      const { loadScript, runScript } = await import("../lib/login-scripts.js");
+      const script = loadScript(name);
+      if (!script) return err(new Error(`Script '${name}' not found. Use browser_script_list to see available scripts.`));
+
+      let sid: string;
+      let page: import("playwright").Page;
+      if (session_id) {
+        sid = resolveSessionId(session_id);
+        page = getSessionPage(sid);
+      } else {
+        const result = await createSession({ headless: true });
+        sid = result.session.id;
+        page = result.page;
+      }
+
+      const result = await runScript(script, page, variables ?? {});
+      return json({ ...result, session_id: sid, url: page.url() });
+    } catch (e) { return err(e); }
+  }
+);
+
+server.tool(
+  "browser_script_list",
+  "List all saved login scripts",
+  {},
+  async () => {
+    try {
+      const { listScripts } = await import("../lib/login-scripts.js");
+      return json({ scripts: listScripts() });
+    } catch (e) { return err(e); }
+  }
+);
+
+server.tool(
+  "browser_script_save",
+  "Save a login script from a JSON definition. Use for creating custom multi-step workflows that combine browser actions + connector calls.",
+  { script: z.string().describe("JSON string of the LoginScript object") },
+  async ({ script: scriptJson }) => {
+    try {
+      const { saveScript } = await import("../lib/login-scripts.js");
+      const script = JSON.parse(scriptJson);
+      const path = saveScript(script);
+      return json({ saved: true, name: script.name, path, steps: script.steps.length });
+    } catch (e) { return err(e); }
+  }
+);
+
+server.tool(
+  "browser_script_delete",
+  "Delete a saved login script",
+  { name: z.string() },
+  async ({ name }) => {
+    try {
+      const { deleteScript } = await import("../lib/login-scripts.js");
+      return json({ deleted: deleteScript(name) });
+    } catch (e) { return err(e); }
+  }
+);
+
 // ── Data Extraction Tools ────────────────────────────────────────────────────
 
 server.tool(
