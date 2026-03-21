@@ -324,4 +324,139 @@ program
     await import("../server/index.js");
   });
 
+// ─── gallery ─────────────────────────────────────────────────────────────────
+
+const galleryCmd = program.command("gallery").description("Manage screenshot gallery");
+
+galleryCmd
+  .command("list")
+  .description("List gallery entries")
+  .option("--project <id>", "Filter by project ID")
+  .option("--tag <tag>", "Filter by tag")
+  .option("--favorite", "Show only favorites")
+  .option("--limit <n>", "Max entries", "20")
+  .action(async (opts: { project?: string; tag?: string; favorite?: boolean; limit: string }) => {
+    const { listEntries } = await import("../db/gallery.js");
+    const entries = listEntries({ projectId: opts.project, tag: opts.tag, isFavorite: opts.favorite, limit: parseInt(opts.limit) });
+    if (entries.length === 0) { console.log(chalk.gray("No gallery entries found")); return; }
+    entries.forEach((e) => {
+      const fav = e.is_favorite ? chalk.yellow("★") : " ";
+      const tags = e.tags.length ? chalk.blue(` [${e.tags.join(",")}]`) : "";
+      const size = e.compressed_size_bytes ? chalk.gray(` ${(e.compressed_size_bytes / 1024).toFixed(1)}KB`) : "";
+      const ratio = e.compression_ratio != null ? chalk.green(` ${(e.compression_ratio * 100).toFixed(0)}%`) : "";
+      console.log(`${fav} ${e.id.slice(0, 8)} ${chalk.cyan(e.format ?? "?")}${size}${ratio}${tags} ${chalk.gray(e.url?.slice(0, 60) ?? "")}`);
+    });
+    console.log(chalk.gray(`\n${entries.length} entries`));
+  });
+
+galleryCmd
+  .command("get <id>")
+  .description("Show gallery entry details")
+  .action(async (id: string) => {
+    const { getEntry } = await import("../db/gallery.js");
+    const entry = getEntry(id);
+    if (!entry) { console.log(chalk.red(`Not found: ${id}`)); return; }
+    console.log(JSON.stringify(entry, null, 2));
+  });
+
+galleryCmd
+  .command("tag <id> <tag>")
+  .description("Add a tag to a gallery entry")
+  .action(async (id: string, tag: string) => {
+    const { tagEntry } = await import("../db/gallery.js");
+    const entry = tagEntry(id, tag);
+    console.log(chalk.green(`✓ Tagged: ${entry?.tags.join(", ")}`));
+  });
+
+galleryCmd
+  .command("search <query>")
+  .description("Search gallery by URL, title, notes, or tags")
+  .option("--limit <n>", "Max results", "10")
+  .action(async (query: string, opts: { limit: string }) => {
+    const { searchEntries } = await import("../db/gallery.js");
+    const results = searchEntries(query, parseInt(opts.limit));
+    if (results.length === 0) { console.log(chalk.gray("No results")); return; }
+    results.forEach((e) => console.log(`${e.id.slice(0, 8)} ${e.title ?? ""} ${chalk.gray(e.url ?? "")}`));
+  });
+
+galleryCmd
+  .command("diff <id1> <id2>")
+  .description("Pixel-diff two gallery screenshots")
+  .option("--output <path>", "Save diff image to path")
+  .action(async (id1: string, id2: string, opts: { output?: string }) => {
+    const { getEntry } = await import("../db/gallery.js");
+    const { diffImages } = await import("../lib/gallery-diff.js");
+    const e1 = getEntry(id1);
+    const e2 = getEntry(id2);
+    if (!e1 || !e2) { console.log(chalk.red("One or both entries not found")); return; }
+    const result = await diffImages(e1.path, e2.path);
+    if (opts.output) {
+      const { copyFileSync } = await import("node:fs");
+      copyFileSync(result.diff_path, opts.output);
+      console.log(chalk.green(`✓ Diff saved: ${opts.output}`));
+    }
+    console.log(chalk.blue(`Changed pixels: ${result.changed_pixels} / ${result.total_pixels} (${result.changed_percent.toFixed(2)}%)`));
+  });
+
+galleryCmd
+  .command("stats")
+  .description("Show gallery statistics")
+  .option("--project <id>", "Filter by project")
+  .action(async (opts: { project?: string }) => {
+    const { getGalleryStats } = await import("../db/gallery.js");
+    const stats = getGalleryStats(opts.project);
+    console.log(chalk.bold("Gallery Stats:"));
+    console.log(`  Total:     ${stats.total}`);
+    console.log(`  Favorites: ${stats.favorites}`);
+    console.log(`  Size:      ${(stats.total_size_bytes / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`  Formats:   ${JSON.stringify(stats.by_format)}`);
+  });
+
+galleryCmd
+  .command("clean")
+  .description("Delete gallery entries with missing files")
+  .action(async () => {
+    const { listEntries, deleteEntry } = await import("../db/gallery.js");
+    const { existsSync } = await import("node:fs");
+    const entries = listEntries({ limit: 9999 });
+    let removed = 0;
+    for (const e of entries) {
+      if (!existsSync(e.path)) { deleteEntry(e.id); removed++; }
+    }
+    console.log(chalk.green(`✓ Cleaned ${removed} orphaned entries`));
+  });
+
+// ─── downloads ────────────────────────────────────────────────────────────────
+
+const downloadsCmd = program.command("downloads").description("Manage downloads folder");
+
+downloadsCmd
+  .command("list")
+  .description("List downloaded files")
+  .action(async () => {
+    const { listDownloads } = await import("../lib/downloads.js");
+    const files = listDownloads();
+    if (files.length === 0) { console.log(chalk.gray("No downloads")); return; }
+    files.forEach((f) => console.log(`${f.id.slice(0, 8)} ${chalk.cyan(f.type)} ${chalk.gray((f.size_bytes / 1024).toFixed(1) + "KB")} ${f.filename}`));
+  });
+
+downloadsCmd
+  .command("clean")
+  .description("Delete downloads older than N days")
+  .option("--days <n>", "Age threshold in days", "7")
+  .action(async (opts: { days: string }) => {
+    const { cleanStaleDownloads } = await import("../lib/downloads.js");
+    const count = cleanStaleDownloads(parseInt(opts.days));
+    console.log(chalk.green(`✓ Deleted ${count} stale download(s)`));
+  });
+
+downloadsCmd
+  .command("export <id> <target>")
+  .description("Copy a download to a target path")
+  .action(async (id: string, target: string) => {
+    const { exportToPath } = await import("../lib/downloads.js");
+    const path = exportToPath(id, target);
+    console.log(chalk.green(`✓ Exported to: ${path}`));
+  });
+
 program.parseAsync(process.argv);

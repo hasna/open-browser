@@ -154,6 +154,40 @@ function runMigrations(db: Database): void {
         CREATE INDEX IF NOT EXISTS idx_crawl_results_project ON crawl_results(project_id);
       `,
     },
+    {
+      version: 2,
+      sql: `
+        -- Gallery entries
+        CREATE TABLE IF NOT EXISTS gallery_entries (
+          id                    TEXT PRIMARY KEY,
+          session_id            TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+          project_id            TEXT REFERENCES projects(id) ON DELETE SET NULL,
+          url                   TEXT,
+          title                 TEXT,
+          path                  TEXT NOT NULL,
+          thumbnail_path        TEXT,
+          format                TEXT,
+          width                 INTEGER,
+          height                INTEGER,
+          original_size_bytes   INTEGER,
+          compressed_size_bytes INTEGER,
+          compression_ratio     REAL,
+          tags                  TEXT NOT NULL DEFAULT '[]',
+          notes                 TEXT,
+          is_favorite           INTEGER NOT NULL DEFAULT 0,
+          created_at            TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- Session name column (migration 2 adds it)
+        ALTER TABLE sessions ADD COLUMN name TEXT;
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_name ON sessions(name) WHERE name IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_gallery_session ON gallery_entries(session_id);
+        CREATE INDEX IF NOT EXISTS idx_gallery_project ON gallery_entries(project_id);
+        CREATE INDEX IF NOT EXISTS idx_gallery_favorite ON gallery_entries(is_favorite);
+        CREATE INDEX IF NOT EXISTS idx_gallery_created ON gallery_entries(created_at);
+      `,
+    },
   ];
 
   for (const m of migrations) {

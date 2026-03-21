@@ -2,7 +2,7 @@ import type { Browser, Page } from "playwright";
 import type { Session, SessionOptions, SessionStatus } from "../types/index.js";
 import { BrowserEngine, UseCase } from "../types/index.js";
 import { SessionNotFoundError, BrowserError } from "../types/index.js";
-import { createSession as dbCreateSession, getSession as dbGetSession, listSessions as dbListSessions, closeSession as dbCloseSession, updateSessionStatus } from "../db/sessions.js";
+import { createSession as dbCreateSession, getSession as dbGetSession, listSessions as dbListSessions, closeSession as dbCloseSession, updateSessionStatus, getSessionByName as dbGetSessionByName, renameSession as dbRenameSession } from "../db/sessions.js";
 import { launchPlaywright, getPage as getPlaywrightPage, closeBrowser as closePlaywrightBrowser } from "../engines/playwright.js";
 import { connectLightpanda } from "../engines/lightpanda.js";
 import { selectEngine } from "../engines/selector.js";
@@ -123,4 +123,12 @@ export async function closeAllSessions(): Promise<void> {
   for (const [id] of handles) {
     await closeSession(id).catch(() => {});
   }
+}
+
+export function getSessionByName(name: string) {
+  return dbGetSessionByName(name);
+}
+
+export function renameSession(id: string, name: string) {
+  return dbRenameSession(id, name);
 }

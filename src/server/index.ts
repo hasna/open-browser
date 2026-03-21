@@ -14,6 +14,9 @@ import { ensureProject, listProjects, getProject } from "../db/projects.js";
 import { getNetworkLog, clearNetworkLog } from "../db/network-log.js";
 import { getConsoleLog } from "../db/console-log.js";
 import { listRecordings, getRecording } from "../db/recordings.js";
+import { listEntries, getEntry, tagEntry, favoriteEntry, deleteEntry, searchEntries, getGalleryStats } from "../db/gallery.js";
+import { listDownloads, getDownload, deleteDownload, cleanStaleDownloads } from "../lib/downloads.js";
+import { diffImages } from "../lib/gallery-diff.js";
 import type { BrowserEngine } from "../types/index.js";
 
 const PORT = parseInt(process.env["BROWSER_SERVER_PORT"] ?? "7030");
@@ -256,6 +259,79 @@ const server = Bun.serve({
         if (!body.name || !body.path) return badRequest("name and path required");
         const project = ensureProject(body.name, body.path, body.description);
         return ok({ project }, 201);
+      }
+
+      // ── Gallery ──────────────────────────────────────────────────────────
+      if (path === "/api/gallery" && method === "GET") {
+        const tag = url.searchParams.get("tag") ?? undefined;
+        const projectId = url.searchParams.get("project_id") ?? undefined;
+        const isFavorite = url.searchParams.get("is_favorite") === "true" ? true : undefined;
+        const limit = parseInt(url.searchParams.get("limit") ?? "50");
+        const entries = listEntries({ tag, projectId, isFavorite, limit });
+        return ok({ entries, count: entries.length });
+      }
+      if (path === "/api/gallery/stats" && method === "GET") {
+        return ok(getGalleryStats(url.searchParams.get("project_id") ?? undefined));
+      }
+      if (path === "/api/gallery/diff" && method === "POST") {
+        const body = await req.json() as { id1: string; id2: string };
+        const e1 = getEntry(body.id1); const e2 = getEntry(body.id2);
+        if (!e1 || !e2) return notFound("Gallery entry not found");
+        return ok(await diffImages(e1.path, e2.path));
+      }
+      if (path.match(/^\/api\/gallery\/([^/]+)\/tag$/) && method === "POST") {
+        const id = path.split("/")[3];
+        const body = await req.json() as { tag: string };
+        return ok({ entry: tagEntry(id, body.tag) });
+      }
+      if (path.match(/^\/api\/gallery\/([^/]+)\/favorite$/) && method === "PUT") {
+        const id = path.split("/")[3];
+        const body = await req.json() as { favorited: boolean };
+        return ok({ entry: favoriteEntry(id, body.favorited) });
+      }
+      if (path.match(/^\/api\/gallery\/([^/]+)\/thumbnail$/) && method === "GET") {
+        const id = path.split("/")[3];
+        const entry = getEntry(id);
+        if (!entry?.thumbnail_path || !existsSync(entry.thumbnail_path)) return notFound("Thumbnail not found");
+        return new Response(Bun.file(entry.thumbnail_path), { headers: { ...CORS_HEADERS } });
+      }
+      if (path.match(/^\/api\/gallery\/([^/]+)\/image$/) && method === "GET") {
+        const id = path.split("/")[3];
+        const entry = getEntry(id);
+        if (!entry?.path || !existsSync(entry.path)) return notFound("Image not found");
+        return new Response(Bun.file(entry.path), { headers: { ...CORS_HEADERS } });
+      }
+      if (path.match(/^\/api\/gallery\/([^/]+)$/) && method === "DELETE") {
+        const id = path.split("/")[3];
+        deleteEntry(id);
+        return ok({ deleted: id });
+      }
+      if (path.match(/^\/api\/gallery\/([^/]+)$/) && method === "GET") {
+        const id = path.split("/")[3];
+        const entry = getEntry(id);
+        if (!entry) return notFound("Gallery entry not found");
+        return ok({ entry });
+      }
+
+      // ── Downloads ─────────────────────────────────────────────────────────
+      if (path === "/api/downloads" && method === "GET") {
+        const sessionId = url.searchParams.get("session_id") ?? undefined;
+        const downloads = listDownloads(sessionId);
+        return ok({ downloads, count: downloads.length });
+      }
+      if (path === "/api/downloads/clean" && method === "DELETE") {
+        const days = parseInt(url.searchParams.get("days") ?? "7");
+        return ok({ deleted_count: cleanStaleDownloads(days) });
+      }
+      if (path.match(/^\/api\/downloads\/([^/]+)\/raw$/) && method === "GET") {
+        const id = path.split("/")[3];
+        const file = getDownload(id);
+        if (!file || !existsSync(file.path)) return notFound("Download not found");
+        return new Response(Bun.file(file.path), { headers: { ...CORS_HEADERS } });
+      }
+      if (path.match(/^\/api\/downloads\/([^/]+)$/) && method === "DELETE") {
+        const id = path.split("/")[3];
+        return ok({ deleted: deleteDownload(id) });
       }
 
       // ── Dashboard (static) ───────────────────────────────────────────────

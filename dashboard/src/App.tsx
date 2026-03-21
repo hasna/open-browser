@@ -7,9 +7,13 @@ import PerformancePage from "./pages/PerformancePage.js";
 import RecordingsPage from "./pages/RecordingsPage.js";
 import AgentsPage from "./pages/AgentsPage.js";
 import ProjectsPage from "./pages/ProjectsPage.js";
+import GalleryPage from "./pages/GalleryPage.js";
+import DownloadsPage from "./pages/DownloadsPage.js";
 
 const NAV = [
   { id: "sessions", label: "Sessions" },
+  { id: "gallery", label: "Gallery" },
+  { id: "downloads", label: "Downloads" },
   { id: "network", label: "Network" },
   { id: "console", label: "Console" },
   { id: "screenshots", label: "Screenshots" },
@@ -34,6 +38,8 @@ export default function App() {
 
   const pages: Record<string, React.ReactNode> = {
     sessions: <SessionsPage onSelectSession={setSelectedSession} />,
+    gallery: <GalleryPage />,
+    downloads: <DownloadsPage />,
     network: <NetworkLogPage sessionId={selectedSession} />,
     console: <ConsolePage sessionId={selectedSession} />,
     screenshots: <ScreenshotsPage sessionId={selectedSession} />,

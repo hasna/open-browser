@@ -8,14 +8,26 @@ export interface CreateSessionData {
   projectId?: string;
   agentId?: string;
   startUrl?: string;
+  name?: string;
 }
 
 export function createSession(data: CreateSessionData): Session {
   const db = getDatabase();
   const id = randomUUID();
   db.prepare(
-    "INSERT INTO sessions (id, engine, project_id, agent_id, start_url) VALUES (?, ?, ?, ?, ?)"
-  ).run(id, data.engine, data.projectId ?? null, data.agentId ?? null, data.startUrl ?? null);
+    "INSERT INTO sessions (id, engine, project_id, agent_id, start_url, name) VALUES (?, ?, ?, ?, ?, ?)"
+  ).run(id, data.engine, data.projectId ?? null, data.agentId ?? null, data.startUrl ?? null, data.name ?? null);
+  return getSession(id);
+}
+
+export function getSessionByName(name: string): Session | null {
+  const db = getDatabase();
+  return db.query<Session, string>("SELECT * FROM sessions WHERE name = ?").get(name) ?? null;
+}
+
+export function renameSession(id: string, name: string): Session {
+  const db = getDatabase();
+  db.prepare("UPDATE sessions SET name = ? WHERE id = ?").run(name, id);
   return getSession(id);
 }
 

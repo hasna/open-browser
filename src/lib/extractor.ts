@@ -1,5 +1,5 @@
 import type { Page, ElementHandle } from "playwright";
-import type { ExtractOptions, ExtractResult } from "../types/index.js";
+import type { ExtractOptions, ExtractResult, PageInfo } from "../types/index.js";
 import { BrowserError } from "../types/index.js";
 
 export async function getText(page: Page, selector?: string): Promise<string> {
@@ -131,4 +131,54 @@ export async function extract(page: Page, opts: ExtractOptions = {}): Promise<Ex
   }
 
   return result;
+}
+
+// ─── QoL: element existence check ────────────────────────────────────────────
+
+export async function elementExists(
+  page: Page,
+  selector: string,
+  opts?: { visible?: boolean }
+): Promise<{ exists: boolean; visible: boolean; count: number }> {
+  const elements = await page.$$(selector);
+  if (elements.length === 0) return { exists: false, visible: false, count: 0 };
+
+  let visible = false;
+  try {
+    visible = await elements[0].isVisible();
+  } catch {
+    visible = false;
+  }
+
+  return { exists: true, visible, count: elements.length };
+}
+
+// ─── QoL: one-shot page info ──────────────────────────────────────────────────
+
+export async function getPageInfo(page: Page): Promise<PageInfo> {
+  const url = page.url();
+  const title = await page.title();
+
+  const info = await page.evaluate(() => {
+    const metaDesc = document.querySelector('meta[name="description"]')?.getAttribute("content");
+    const metaKw = document.querySelector('meta[name="keywords"]')?.getAttribute("content");
+    return {
+      meta_description: metaDesc ?? undefined,
+      meta_keywords: metaKw ?? undefined,
+      links_count: document.querySelectorAll("a[href]").length,
+      images_count: document.querySelectorAll("img").length,
+      forms_count: document.querySelectorAll("form").length,
+      text_length: (document.body?.innerText ?? "").length,
+    };
+  });
+
+  const viewport = page.viewportSize() ?? { width: 1280, height: 720 };
+
+  return {
+    url,
+    title,
+    ...info,
+    has_console_errors: false,
+    viewport,
+  };
 }

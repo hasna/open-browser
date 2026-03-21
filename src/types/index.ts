@@ -57,6 +57,7 @@ export interface Session {
   project_id?: string;
   agent_id?: string;
   start_url?: string;
+  name?: string;
   status: SessionStatus;
   created_at: string;
   closed_at?: string;
@@ -275,6 +276,10 @@ export interface ScreenshotOptions {
   format?: "png" | "jpeg" | "webp";
   quality?: number;
   path?: string;
+  // Compression options
+  compress?: boolean;       // default: true — run sharp compression pipeline
+  maxWidth?: number;        // default: 1280 — downscale if wider
+  thumbnail?: boolean;      // default: true — generate 200px thumb alongside
 }
 
 export interface ScreenshotResult {
@@ -284,6 +289,88 @@ export interface ScreenshotResult {
   width: number;
   height: number;
   size_bytes: number;
+  // Compression metadata
+  original_size_bytes?: number;
+  compressed_size_bytes?: number;
+  compression_ratio?: number;
+  thumbnail_path?: string;
+  thumbnail_base64?: string;
+  // Gallery tracking
+  gallery_id?: string;
+}
+
+// ─── Gallery ─────────────────────────────────────────────────────────────────
+
+export interface GalleryEntry {
+  id: string;
+  session_id?: string;
+  project_id?: string;
+  url?: string;
+  title?: string;
+  path: string;
+  thumbnail_path?: string;
+  format?: string;
+  width?: number;
+  height?: number;
+  original_size_bytes?: number;
+  compressed_size_bytes?: number;
+  compression_ratio?: number;
+  tags: string[];
+  notes?: string;
+  is_favorite: boolean;
+  created_at: string;
+}
+
+export interface GalleryStats {
+  total: number;
+  total_size_bytes: number;
+  favorites: number;
+  by_format: Record<string, number>;
+}
+
+export interface GalleryDiffResult {
+  diff_path: string;
+  diff_base64: string;
+  changed_pixels: number;
+  total_pixels: number;
+  changed_percent: number;
+}
+
+// ─── Downloads ───────────────────────────────────────────────────────────────
+
+export interface DownloadedFile {
+  id: string;
+  path: string;
+  filename: string;
+  type: string;
+  source_url?: string;
+  session_id?: string;
+  created_at: string;
+  size_bytes: number;
+  meta_path: string;
+}
+
+// ─── Page Info ───────────────────────────────────────────────────────────────
+
+export interface PageInfo {
+  url: string;
+  title: string;
+  meta_description?: string;
+  meta_keywords?: string;
+  links_count: number;
+  images_count: number;
+  forms_count: number;
+  text_length: number;
+  has_console_errors: boolean;
+  viewport: { width: number; height: number };
+}
+
+// ─── Form Fill ───────────────────────────────────────────────────────────────
+
+export interface FormFillResult {
+  filled: number;
+  errors: string[];
+  fields_attempted: number;
 }
 
 // ─── PDF ─────────────────────────────────────────────────────────────────────
@@ -300,6 +387,7 @@ export interface PDFResult {
   path: string;
   base64: string;
   size_bytes: number;
+  page_count?: number;
 }
 
 // ─── Config ──────────────────────────────────────────────────────────────────

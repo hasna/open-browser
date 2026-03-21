@@ -180,3 +180,173 @@ export async function waitForNavigation(page: Page, timeout = 30000): Promise<vo
 export async function pressKey(page: Page, key: string): Promise<void> {
   await page.keyboard.press(key);
 }
+
+// ─── Retry helper ─────────────────────────────────────────────────────────────
+
+export interface RetryOptions {
+  retries?: number;
+  delay?: number;
+  retryOn?: string[];
+}
+
+const RETRYABLE_ERRORS = ["Timeout", "timeout", "navigation", "net::ERR", "Target closed"];
+
+export async function withRetry<T>(fn: () => Promise<T>, opts?: RetryOptions): Promise<T> {
+  const retries = opts?.retries ?? 2;
+  const delay = opts?.delay ?? 300;
+  const retryOn = opts?.retryOn ?? RETRYABLE_ERRORS;
+
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      const shouldRetry = retryOn.some((pattern) => msg.includes(pattern));
+      // Never retry on element-not-found — it's deterministic
+      if (!shouldRetry || err instanceof ElementNotFoundError) throw err;
+      if (attempt < retries) await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  throw lastErr;
+}
+
+// ─── QoL: click by text content ──────────────────────────────────────────────
+
+export async function clickText(
+  page: Page,
+  text: string,
+  opts?: { exact?: boolean; timeout?: number; retries?: number }
+): Promise<void> {
+  await withRetry(async () => {
+    try {
+      await page.getByText(text, { exact: opts?.exact ?? false }).first().click({ timeout: opts?.timeout ?? 10000 });
+    } catch (err) {
+      throw new BrowserError(
+        `clickText: could not find or click text "${text}": ${err instanceof Error ? err.message : String(err)}`,
+        "CLICK_TEXT_FAILED"
+      );
+    }
+  }, { retries: opts?.retries ?? 1 });
+}
+
+// ─── QoL: one-shot form fill ──────────────────────────────────────────────────
+
+import type { FormFillResult } from "../types/index.js";
+
+export async function fillForm(
+  page: Page,
+  fields: Record<string, string | boolean>,
+  submitSelector?: string
+): Promise<FormFillResult> {
+  let filled = 0;
+  const errors: string[] = [];
+
+  for (const [selector, value] of Object.entries(fields)) {
+    try {
+      const el = await page.$(selector);
+      if (!el) { errors.push(`${selector}: element not found`); continue; }
+
+      const tagName = await el.evaluate((e) => (e as HTMLElement).tagName.toLowerCase());
+      const inputType = await el.evaluate((e) => (e as HTMLInputElement).type?.toLowerCase() ?? "text");
+
+      if (tagName === "select") {
+        await page.selectOption(selector, String(value));
+      } else if (tagName === "input" && (inputType === "checkbox" || inputType === "radio")) {
+        const checked = Boolean(value);
+        if (checked) {
+          await page.check(selector);
+        } else {
+          await page.uncheck(selector);
+        }
+      } else {
+        await page.fill(selector, String(value));
+      }
+      filled++;
+    } catch (err) {
+      errors.push(`${selector}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  if (submitSelector) {
+    try {
+      await page.click(submitSelector);
+    } catch (err) {
+      errors.push(`submit(${submitSelector}): ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  return { filled, errors, fields_attempted: Object.keys(fields).length };
+}
+
+// ─── QoL: wait for text ───────────────────────────────────────────────────────
+
+export async function waitForText(
+  page: Page,
+  text: string,
+  opts?: { timeout?: number; exact?: boolean }
+): Promise<void> {
+  const timeout = opts?.timeout ?? 10000;
+  try {
+    await page.getByText(text, { exact: opts?.exact ?? false }).first().waitFor({ state: "visible", timeout });
+  } catch (err) {
+    throw new ElementNotFoundError(`text:"${text}"`);
+  }
+}
+
+// ─── QoL: watch page for DOM changes ─────────────────────────────────────────
+
+export interface WatchHandle {
+  id: string;
+  stop: () => void;
+}
+
+const activeWatches = new Map<string, { interval: ReturnType<typeof setInterval>; changes: string[] }>();
+
+export function watchPage(
+  page: Page,
+  opts?: { selector?: string; intervalMs?: number; maxChanges?: number }
+): WatchHandle {
+  const id = `watch-${Date.now()}`;
+  const changes: string[] = [];
+  const intervalMs = opts?.intervalMs ?? 500;
+  const maxChanges = opts?.maxChanges ?? 50;
+
+  const interval = setInterval(async () => {
+    if (changes.length >= maxChanges) return;
+    try {
+      const change = await page.evaluate((sel) => {
+        const el = sel ? document.querySelector(sel) : document.body;
+        return el ? `${new Date().toISOString()}:${el.textContent?.slice(0, 100)}` : null;
+      }, opts?.selector ?? null);
+      if (change && (changes.length === 0 || changes[changes.length - 1] !== change)) {
+        changes.push(change);
+      }
+    } catch {
+      // Page might be navigating
+    }
+  }, intervalMs);
+
+  activeWatches.set(id, { interval, changes });
+
+  return {
+    id,
+    stop: () => {
+      clearInterval(interval);
+      activeWatches.delete(id);
+    },
+  };
+}
+
+export function getWatchChanges(watchId: string): string[] {
+  return activeWatches.get(watchId)?.changes ?? [];
+}
+
+export function stopWatch(watchId: string): void {
+  const w = activeWatches.get(watchId);
+  if (w) {
+    clearInterval(w.interval);
+    activeWatches.delete(watchId);
+  }
+}
