@@ -605,10 +605,10 @@ server.tool(
 
 server.tool(
   "browser_screenshot",
-  "Take a screenshot. Use annotate=true to overlay numbered labels on interactive elements for visual+ref workflows.",
+  "Take a screenshot. Use selector to capture a specific element/section instead of the full page. Use detail='high' for AI-readable full image, 'low' for fast thumbnail. Use annotate=true to overlay numbered labels on interactive elements.",
   {
     session_id: z.string().optional(),
-    selector: z.string().optional(),
+    selector: z.string().optional().describe("CSS selector to screenshot a specific section (e.g. '#main', '.header', 'form')"),
     full_page: z.boolean().optional().default(false),
     format: z.enum(["png", "jpeg", "webp"]).optional().default("webp"),
     quality: z.number().optional().default(60),
@@ -616,8 +616,9 @@ server.tool(
     compress: z.boolean().optional().default(true),
     thumbnail: z.boolean().optional().default(true),
     annotate: z.boolean().optional().default(false),
+    detail: z.enum(["low", "high"]).optional().default("low").describe("'low' = thumbnail only (fast, saves tokens). 'high' = full readable image in base64 (larger but AI can read text)."),
   },
-  async ({ session_id, selector, full_page, format, quality, max_width, compress, thumbnail, annotate }) => {
+  async ({ session_id, selector, full_page, format, quality, max_width, compress, thumbnail, annotate, detail }) => {
     try {
       const sid = resolveSessionId(session_id);
       const page = getSessionPage(sid);
@@ -637,7 +638,11 @@ server.tool(
         });
       }
 
-      const result = await takeScreenshot(page, { selector, fullPage: full_page, format, quality, maxWidth: max_width, compress, thumbnail });
+      // detail=high: use larger image for AI readability (1280px, quality 75)
+      const effectiveMaxWidth = detail === "high" ? 1280 : max_width;
+      const effectiveQuality = detail === "high" ? 75 : quality;
+
+      const result = await takeScreenshot(page, { selector, fullPage: full_page, format, quality: effectiveQuality, maxWidth: effectiveMaxWidth, compress, thumbnail });
       // Populate URL
       result.url = page.url();
       // Auto-save to downloads folder
@@ -649,13 +654,13 @@ server.tool(
       } catch { /* non-fatal */ }
       // Token estimate before truncation
       (result as any).estimated_tokens = Math.ceil(result.base64.length / 4);
-      // Smart base64 truncation: if > 20KB chars, return thumbnail only
-      if (result.base64.length > 20000) {
+      // Smart base64 truncation — detail=high skips truncation so AI can read the image
+      if (detail !== "high" && result.base64.length > 40000) {
         (result as any).base64_truncated = true;
         (result as any).full_image_path = result.path;
         result.base64 = result.thumbnail_base64 ?? "";
       }
-      logEvent(sid, "screenshot", { path: result.path });
+      logEvent(sid, "screenshot", { path: result.path, detail, selector });
       return json(result);
     } catch (e) { return err(e); }
   }
