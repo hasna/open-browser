@@ -285,6 +285,50 @@ function runMigrations(db: Database): void {
         CREATE INDEX IF NOT EXISTS idx_api_endpoints_session ON api_endpoints(session_id);
       `,
     },
+    {
+      version: 9,
+      sql: `
+        CREATE TABLE IF NOT EXISTS scripts (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL UNIQUE,
+          domain TEXT NOT NULL DEFAULT '',
+          description TEXT DEFAULT '',
+          variables TEXT NOT NULL DEFAULT '{}',
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now')),
+          last_run TEXT,
+          run_count INTEGER DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS script_steps (
+          id TEXT PRIMARY KEY,
+          script_id TEXT NOT NULL REFERENCES scripts(id) ON DELETE CASCADE,
+          step_order INTEGER NOT NULL,
+          type TEXT NOT NULL,
+          config TEXT NOT NULL DEFAULT '{}',
+          description TEXT DEFAULT '',
+          ai_enabled INTEGER DEFAULT 0,
+          ai_config TEXT DEFAULT '{}'
+        );
+        CREATE INDEX IF NOT EXISTS idx_script_steps_order ON script_steps(script_id, step_order);
+
+        CREATE TABLE IF NOT EXISTS script_runs (
+          id TEXT PRIMARY KEY,
+          script_id TEXT NOT NULL REFERENCES scripts(id) ON DELETE CASCADE,
+          status TEXT NOT NULL DEFAULT 'running',
+          current_step INTEGER DEFAULT 0,
+          total_steps INTEGER DEFAULT 0,
+          current_description TEXT DEFAULT '',
+          variables TEXT DEFAULT '{}',
+          steps_log TEXT DEFAULT '[]',
+          errors TEXT DEFAULT '[]',
+          started_at TEXT DEFAULT (datetime('now')),
+          completed_at TEXT,
+          duration_ms INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_script_runs_script ON script_runs(script_id, status);
+      `,
+    },
   ];
 
   for (const m of migrations) {

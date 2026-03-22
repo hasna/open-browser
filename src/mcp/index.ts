@@ -2326,20 +2326,26 @@ server.tool(
   }
 );
 
-// ── Login Scripts (browser + connector workflows) ────────────────────────────
+// ── Scripts (browser + connector + AI workflows, SQLite-backed) ──────────────
 
 server.tool(
   "browser_script_run",
-  "Run a saved login script asynchronously. Returns a job_id immediately — poll with browser_script_status for step-by-step progress. Combines browser actions + connector calls (e.g. magic link login via Gmail).",
+  "Run a saved script asynchronously. Returns run_id immediately — poll with browser_script_status for step-by-step progress. Scripts combine browser actions + connector calls + AI reasoning. Works with any engine (Bun.WebView, Playwright, CDP).",
   {
-    name: z.string().describe("Script name (e.g. 'usestable')"),
+    name: z.string().describe("Script name"),
     session_id: z.string().optional(),
-    variables: z.record(z.string()).optional().describe("Override script variables (e.g. {email: 'foo@bar.com'})"),
+    engine: z.enum(["playwright", "cdp", "lightpanda", "bun", "auto"]).optional().default("auto"),
+    variables: z.record(z.string()).optional().describe("Override script variables"),
   },
-  async ({ name, session_id, variables }) => {
+  async ({ name, session_id, engine, variables }) => {
     try {
-      const { loadScript, runScriptAsync } = await import("../lib/login-scripts.js");
-      const script = loadScript(name);
+      const { getScriptByName, migrateJsonScripts, getSteps } = await import("../db/scripts.js");
+      const { executeScript } = await import("../lib/script-engine.js");
+
+      // Auto-migrate JSON scripts on first use
+      migrateJsonScripts();
+
+      const script = getScriptByName(name);
       if (!script) return err(new Error(`Script '${name}' not found. Use browser_script_list to see available scripts.`));
 
       let sid: string;
@@ -2348,32 +2354,35 @@ server.tool(
         sid = resolveSessionId(session_id);
         page = getSessionPage(sid);
       } else {
-        const result = await createSession({ headless: true });
+        const result = await createSession({ engine: (engine ?? "auto") as BrowserEngine, headless: true });
         sid = result.session.id;
         page = result.page;
       }
 
-      const jobId = runScriptAsync(script, page, variables ?? {});
-      return json({ job_id: jobId, session_id: sid, script: name, total_steps: script.steps.length, message: "Script running in background. Poll with browser_script_status for progress." });
+      const steps = getSteps(script.id);
+      const runId = executeScript(script.id, page, variables ?? {});
+      return json({ run_id: runId, session_id: sid, script: name, total_steps: steps.length, message: "Script running. Poll with browser_script_status." });
     } catch (e) { return err(e); }
   }
 );
 
 server.tool(
   "browser_script_status",
-  "Check the progress of a running login script. Shows current step, step-by-step log with durations, and final result when complete.",
-  { job_id: z.string() },
-  async ({ job_id }) => {
+  "Check progress of a running script. Shows current step, step-by-step log with durations, and final result when complete.",
+  { run_id: z.string() },
+  async ({ run_id }) => {
     try {
-      const { getJob } = await import("../lib/login-scripts.js");
-      const job = getJob(job_id);
-      if (!job) return err(new Error(`Job '${job_id}' not found`));
+      const { getRun } = await import("../db/scripts.js");
+      const run = getRun(run_id);
+      if (!run) return err(new Error(`Run '${run_id}' not found`));
       return json({
-        status: job.status,
-        progress: `${job.current_step}/${job.total_steps}`,
-        current_step: job.current_step_description,
-        steps_log: job.steps_log,
-        result: job.result ?? undefined,
+        status: run.status,
+        progress: `${run.current_step}/${run.total_steps}`,
+        current_step: run.current_description,
+        steps_log: run.steps_log,
+        errors: run.errors.length > 0 ? run.errors : undefined,
+        duration_ms: run.duration_ms,
+        completed: run.completed_at,
       });
     } catch (e) { return err(e); }
   }
@@ -2381,38 +2390,52 @@ server.tool(
 
 server.tool(
   "browser_script_list",
-  "List all saved login scripts",
+  "List all saved scripts",
   {},
   async () => {
     try {
-      const { listScripts } = await import("../lib/login-scripts.js");
-      return json({ scripts: listScripts() });
+      const { listScripts, migrateJsonScripts } = await import("../db/scripts.js");
+      migrateJsonScripts();
+      const scripts = listScripts();
+      return json({ scripts: scripts.map(s => ({ name: s.name, domain: s.domain, description: s.description, run_count: s.run_count, last_run: s.last_run })), count: scripts.length });
     } catch (e) { return err(e); }
   }
 );
 
 server.tool(
   "browser_script_save",
-  "Save a login script from a JSON definition. Use for creating custom multi-step workflows that combine browser actions + connector calls.",
-  { script: z.string().describe("JSON string of the LoginScript object") },
-  async ({ script: scriptJson }) => {
+  "Save a script. Steps are stored in SQLite. Each step has a type (browser/connector/extract/wait/condition/save_state), config, and optional AI config for intelligent fallbacks.",
+  {
+    name: z.string(),
+    domain: z.string().optional().default(""),
+    description: z.string().optional().default(""),
+    variables: z.record(z.string()).optional().default({}),
+    steps: z.array(z.object({
+      type: z.enum(["browser", "connector", "extract", "wait", "condition", "save_state"]),
+      config: z.record(z.unknown()).default({}),
+      description: z.string().optional().default(""),
+      ai_enabled: z.boolean().optional().default(false),
+      ai_config: z.record(z.unknown()).optional().default({}),
+    })),
+  },
+  async ({ name, domain, description, variables, steps }) => {
     try {
-      const { saveScript } = await import("../lib/login-scripts.js");
-      const script = JSON.parse(scriptJson);
-      const path = saveScript(script);
-      return json({ saved: true, name: script.name, path, steps: script.steps.length });
+      const { upsertScript, getSteps } = await import("../db/scripts.js");
+      const script = upsertScript({ name, domain, description, variables, steps });
+      const savedSteps = getSteps(script.id);
+      return json({ id: script.id, name: script.name, steps: savedSteps.length });
     } catch (e) { return err(e); }
   }
 );
 
 server.tool(
   "browser_script_delete",
-  "Delete a saved login script",
+  "Delete a saved script",
   { name: z.string() },
   async ({ name }) => {
     try {
-      const { deleteScript } = await import("../lib/login-scripts.js");
-      return json({ deleted: deleteScript(name) });
+      const { deleteScriptByName } = await import("../db/scripts.js");
+      return json({ deleted: deleteScriptByName(name) });
     } catch (e) { return err(e); }
   }
 );
