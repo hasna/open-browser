@@ -16,3 +16,6 @@ coverage/
 screenshots/
 pdfs/
 har/
+.idea/
+.vscode/
+.claude/scheduled_tasks.lock

@@ -39,11 +39,11 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
     "@hasna/connectors": "^1.3.3",
-    "@hasna/conversations": "/Users/hasna/Workspace/hasna/opensource/opensourcedev/open-conversations",
-    "@hasna/mementos": "/Users/hasna/Workspace/hasna/opensource/opensourcedev/open-mementos",
+    "@hasna/conversations": "^0.2.17",
+    "@hasna/mementos": "^0.14.0",
     "@hasna/sessions": "^0.11.6",
-    "@hasna/skills": "/Users/hasna/Workspace/hasna/opensource/opensourcedev/open-skills",
-    "@hasna/todos": "/Users/hasna/Workspace/hasna/opensource/opensourcedev/open-todos",
+    "@hasna/skills": "^0.1.14",
+    "@hasna/todos": "^0.11.1",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "chalk": "^5.4.1",
     "commander": "^13.1.0",
@@ -65,7 +65,11 @@
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
-  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hasna/browser.git"
+  },
+  "license": "Apache-2.0",
   "keywords": [
     "browser",
     "automation",

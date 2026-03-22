@@ -30,20 +30,24 @@ Unified browser automation MCP for AI agents — wraps Chrome DevTools, Playwrig
 ## Installation
 
 ```bash
-bun install -g @hasna/open-browser
+bun install -g @hasna/browser
 ```
+
+## Requirements
+
+> **Note:** The Bun.WebView engine requires [Bun canary](https://bun.sh/docs/installation#canary) until WebView support lands in a stable release. Install with: `bun upgrade --canary`. Other engines (Playwright, CDP, Lightpanda) work with stable Bun.
 
 ## Usage
 
 ```bash
 # Default (Chrome DevTools backend)
-open-browser serve
+browser serve
 
 # Playwright backend
-BROWSER_BACKEND=playwright open-browser serve
+BROWSER_BACKEND=playwright browser serve
 
 # Lightpanda backend
-BROWSER_BACKEND=lightpanda open-browser serve
+BROWSER_BACKEND=lightpanda browser serve
 ```
 
 ## MCP Tools
@@ -67,8 +71,8 @@ All tools work identically across backends:
 
 ## Status
 
-🚧 In development. See [tasks](https://github.com/hasna/open-browser/issues) for progress.
+🚧 In development. See [tasks](https://github.com/hasna/browser/issues) for progress.
 
 ## License
 
-MIT
+Apache-2.0 — see [LICENSE](./LICENSE)
