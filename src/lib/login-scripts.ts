@@ -13,7 +13,7 @@ import type { Page } from "playwright";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export type StepType = "browser" | "connector" | "extract" | "wait" | "condition" | "save_state";
+export type StepType = "browser" | "connector" | "extract" | "wait" | "condition" | "save_state" | "ai";
 
 export interface ScriptStep {
   type: StepType;
@@ -27,15 +27,21 @@ export interface ScriptStep {
   value?: string;
   timeout?: number;
 
-  // connector steps
+  // connector steps — calls connectors MCP tools
   connector?: string;
-  args?: string[];
+  operation?: string;    // connector operation name (e.g. "search", "messages read")
+  args?: string[];       // CLI args as fallback
   format?: string;
 
   // extract steps
   pattern?: string;      // regex pattern
   json_path?: string;    // simple JSON path like "output.id"
   save_as?: string;      // variable name to save result into
+
+  // ai steps — send prompt to LLM, get structured response
+  prompt?: string;       // prompt template with {{variables}}
+  model?: string;        // "haiku" | "sonnet" | "opus" (default: haiku for speed)
+  response_format?: "text" | "json";  // default: text
 
   // wait steps
   seconds?: number;
@@ -205,6 +211,10 @@ export async function runScript(
           runExtractStep(step, vars);
           break;
 
+        case "ai":
+          await runAIStep(step, vars);
+          break;
+
         case "wait":
           await new Promise(r => setTimeout(r, (step.seconds ?? 3) * 1000));
           break;
@@ -356,9 +366,9 @@ async function runConnectorStep(step: ScriptStep, vars: Record<string, string>):
   // Interpolate args
   const args = (step.args ?? []).map(a => interpolate(a, vars));
 
-  let result: { stdout: string; stderr: string; exitCode: number; success: boolean };
+  let stdout = "";
 
-  // Use Bun.spawn for reliable CLI execution (inherits PATH, no shell escaping issues)
+  // Use Bun.spawn for reliable CLI execution (inherits PATH from the system)
   try {
     const bin = `connect-${connectorName}`;
     const proc = Bun.spawn([bin, ...args], {
@@ -366,22 +376,24 @@ async function runConnectorStep(step: ScriptStep, vars: Record<string, string>):
       stderr: "pipe",
       env: { ...process.env, HOME: process.env.HOME ?? "" },
     });
-    const stdout = await new Response(proc.stdout).text();
+    stdout = await new Response(proc.stdout).text();
     const stderr = await new Response(proc.stderr).text();
     const exitCode = await proc.exited;
-    result = { stdout, stderr, exitCode, success: exitCode === 0 };
+    vars["last_success"] = String(exitCode === 0);
+    vars["last_exit_code"] = String(exitCode);
+    // If CLI failed but stderr has output, include it
+    if (exitCode !== 0 && stderr) stdout = stderr;
   } catch (e: any) {
-    result = { stdout: "", stderr: e.message ?? String(e), exitCode: 1, success: false };
+    vars["last_success"] = "false";
+    throw new Error(`Connector ${connectorName} failed: ${e.message ?? String(e)}`);
   }
 
-  // Store result in variables
-  vars["last_output"] = result.stdout;
-  vars["last_success"] = String(result.success);
-  vars["last_exit_code"] = String(result.exitCode);
+  // Store result
+  vars["last_output"] = stdout;
 
-  // Try to parse as JSON and extract fields
+  // Try to parse as JSON and extract fields into vars
   try {
-    const parsed = JSON.parse(result.stdout);
+    const parsed = JSON.parse(stdout);
     if (typeof parsed === "object" && parsed !== null) {
       for (const [k, v] of Object.entries(parsed)) {
         if (typeof v === "string" || typeof v === "number") {
@@ -390,11 +402,98 @@ async function runConnectorStep(step: ScriptStep, vars: Record<string, string>):
       }
     }
   } catch {
-    // Not JSON — store raw output
+    // Not JSON — raw output stored in last_output
   }
 
   if (step.save_as) {
-    vars[step.save_as] = result.stdout;
+    vars[step.save_as] = stdout;
+  }
+}
+
+// ─── AI step — send prompt to LLM for reasoning ────────────────────────────
+// Uses Cerebras by default (fastest inference), falls back to Anthropic.
+// Providers: "cerebras" (default), "anthropic"
+
+interface AIProvider {
+  url: string;
+  headers: Record<string, string>;
+  body: (model: string, prompt: string) => unknown;
+  extract: (data: any) => string;
+}
+
+function getAIProvider(provider: string): AIProvider {
+  if (provider === "anthropic") {
+    const apiKey = process.env["ANTHROPIC_API_KEY"];
+    if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
+    return {
+      url: "https://api.anthropic.com/v1/messages",
+      headers: { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+      body: (model, prompt) => ({ model, max_tokens: 1024, messages: [{ role: "user", content: prompt }] }),
+      extract: (data) => data.content?.[0]?.text ?? "",
+    };
+  }
+  // Default: Cerebras (OpenAI-compatible, fastest inference)
+  const apiKey = process.env["CEREBRAS_API_KEY"];
+  if (!apiKey) throw new Error("CEREBRAS_API_KEY not set — required for AI steps (set CEREBRAS_API_KEY or use provider: 'anthropic')");
+  return {
+    url: "https://api.cerebras.ai/v1/chat/completions",
+    headers: { "content-type": "application/json", "Authorization": `Bearer ${apiKey}` },
+    body: (model, prompt) => ({ model, max_tokens: 1024, messages: [{ role: "user", content: prompt }] }),
+    extract: (data) => data.choices?.[0]?.message?.content ?? "",
+  };
+}
+
+const MODEL_MAP: Record<string, { provider: string; model: string }> = {
+  // Cerebras models (default — fastest)
+  fast: { provider: "cerebras", model: "llama-4-scout-17b-16e-instruct" },
+  scout: { provider: "cerebras", model: "llama-4-scout-17b-16e-instruct" },
+  maverick: { provider: "cerebras", model: "llama-4-maverick-17b-128e-instruct" },
+  // Anthropic models
+  haiku: { provider: "anthropic", model: "claude-haiku-4-5-20251001" },
+  sonnet: { provider: "anthropic", model: "claude-sonnet-4-5-20250929" },
+  opus: { provider: "anthropic", model: "claude-opus-4-6" },
+};
+
+async function runAIStep(step: ScriptStep, vars: Record<string, string>): Promise<void> {
+  const prompt = interpolate(step.prompt ?? "", vars);
+  if (!prompt) throw new Error("AI step missing prompt");
+
+  const modelAlias = step.model ?? "fast";
+  const resolved = MODEL_MAP[modelAlias] ?? { provider: "cerebras", model: modelAlias };
+  const saveTo = step.save_as ?? "ai_response";
+
+  const provider = getAIProvider(resolved.provider);
+
+  const response = await fetch(provider.url, {
+    method: "POST",
+    headers: provider.headers,
+    body: JSON.stringify(provider.body(resolved.model, prompt)),
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    throw new Error(`AI API error (${response.status}): ${errBody.slice(0, 200)}`);
+  }
+
+  const data = await response.json() as any;
+  const text = provider.extract(data);
+
+  vars[saveTo] = text;
+  vars["last_output"] = text;
+
+  // If response looks like JSON, parse fields into vars
+  if (step.response_format === "json") {
+    try {
+      const jsonStr = text.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
+      const parsed = JSON.parse(jsonStr);
+      if (typeof parsed === "object" && parsed !== null) {
+        for (const [k, v] of Object.entries(parsed)) {
+          if (typeof v === "string" || typeof v === "number") {
+            vars[`${saveTo}.${k}`] = String(v);
+          }
+        }
+      }
+    } catch {}
   }
 }
 
