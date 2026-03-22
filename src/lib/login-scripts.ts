@@ -355,22 +355,23 @@ async function runConnectorStep(step: ScriptStep, vars: Record<string, string>):
 
   // Interpolate args
   const args = (step.args ?? []).map(a => interpolate(a, vars));
-  const format = step.format ?? "json";
 
   let result: { stdout: string; stderr: string; exitCode: number; success: boolean };
 
+  // Use Bun.spawn for reliable CLI execution (inherits PATH, no shell escaping issues)
   try {
-    const { runConnectorCommand } = await import("@hasna/connectors");
-    result = await runConnectorCommand(connectorName, [...args, "-f", format], step.timeout ?? 30000);
-  } catch {
-    // Fallback: try CLI directly
-    const { execSync } = await import("node:child_process");
-    try {
-      const stdout = execSync(`connect-${connectorName} ${args.join(" ")} -f ${format}`, { timeout: step.timeout ?? 30000, encoding: "utf8" });
-      result = { stdout, stderr: "", exitCode: 0, success: true };
-    } catch (e: any) {
-      result = { stdout: e.stdout ?? "", stderr: e.stderr ?? e.message, exitCode: 1, success: false };
-    }
+    const bin = `connect-${connectorName}`;
+    const proc = Bun.spawn([bin, ...args], {
+      stdout: "pipe",
+      stderr: "pipe",
+      env: { ...process.env, HOME: process.env.HOME ?? "" },
+    });
+    const stdout = await new Response(proc.stdout).text();
+    const stderr = await new Response(proc.stderr).text();
+    const exitCode = await proc.exited;
+    result = { stdout, stderr, exitCode, success: exitCode === 0 };
+  } catch (e: any) {
+    result = { stdout: "", stderr: e.message ?? String(e), exitCode: 1, success: false };
   }
 
   // Store result in variables
