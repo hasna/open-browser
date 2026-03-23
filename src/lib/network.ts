@@ -14,6 +14,7 @@ export function enableNetworkLogging(page: Page, sessionId: string): () => void 
 
   const onResponse = (res: Response) => {
     const start = requestStart.get(res.url()) ?? Date.now();
+    requestStart.delete(res.url());
     const duration = Date.now() - start;
     const req = res.request();
 
@@ -34,12 +35,19 @@ export function enableNetworkLogging(page: Page, sessionId: string): () => void 
     }
   };
 
+  const onRequestFailed = (req: Request) => {
+    requestStart.delete(req.url());
+  };
+
   page.on("request", onRequest);
   page.on("response", onResponse);
+  page.on("requestfailed", onRequestFailed);
 
   return () => {
     page.off("request", onRequest);
     page.off("response", onResponse);
+    page.off("requestfailed", onRequestFailed);
+    requestStart.clear();
   };
 }
 
@@ -90,6 +98,7 @@ export function startHAR(page: Page): HARCapture {
     const key = res.url() + res.request().method();
     const start = requestStart.get(key);
     if (!start) return;
+    requestStart.delete(key);
     const duration = Date.now() - start.time;
 
     const entry: HAREntry = {
@@ -114,17 +123,23 @@ export function startHAR(page: Page): HARCapture {
     };
 
     entries.push(entry);
-    requestStart.delete(key);
+  };
+
+  const onRequestFailed = (req: Request) => {
+    requestStart.delete(req.url() + req.method());
   };
 
   page.on("request", onRequest);
   page.on("response", onResponse);
+  page.on("requestfailed", onRequestFailed);
 
   return {
     entries,
     stop: (): HAR => {
       page.off("request", onRequest);
       page.off("response", onResponse);
+      page.off("requestfailed", onRequestFailed);
+      requestStart.clear();
       return {
         log: {
           version: "1.2",

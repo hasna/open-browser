@@ -140,6 +140,15 @@ export function getCronEvents(jobId: string, limit = 10): CronEvent[] {
   return rows.map(r => ({ ...r, success: r.success === 1, result: r.result ? JSON.parse(r.result) : undefined }));
 }
 
+/** Remove cron_events older than the retention period (default 7 days). */
+export function pruneCronEvents(retentionDays = 7): number {
+  ensureCronTable();
+  const db = getDatabase();
+  const cutoff = new Date(Date.now() - retentionDays * 86_400_000).toISOString();
+  const result = db.prepare("DELETE FROM cron_events WHERE started_at < ?").run(cutoff);
+  return result.changes;
+}
+
 // ─── Execution ────────────────────────────────────────────────────────────────
 
 async function executeCronJob(job: CronJob): Promise<CronEvent> {
@@ -220,6 +229,10 @@ function unregisterCronJob(id: string): void {
 
 export function loadCronJobsOnStartup(): void {
   try {
+    // Prune old events to prevent unbounded DB growth
+    const pruned = pruneCronEvents();
+    if (pruned > 0) console.error(`[browser] Pruned ${pruned} old cron event(s)`);
+
     const jobs = listCronJobs();
     for (const job of jobs) {
       if (job.enabled) registerCronJob(job);

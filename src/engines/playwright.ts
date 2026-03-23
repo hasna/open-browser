@@ -85,11 +85,17 @@ export class BrowserPool {
       return browser;
     }
 
-    // Wait for one to become available
-    return new Promise((resolve) => {
+    // Wait for one to become available (timeout after 30s to prevent leaked intervals)
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        clearInterval(interval);
+        reject(new BrowserError("Browser pool exhausted — no browser became available within 30s", "POOL_TIMEOUT", true));
+      }, 30_000);
+
       const interval = setInterval(() => {
         const free = this.pool.find((e) => !e.inUse);
         if (free) {
+          clearTimeout(timeout);
           clearInterval(interval);
           free.inUse = true;
           resolve(free.browser);
