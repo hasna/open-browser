@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { mkdirSync, copyFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { getDataDir } from "../db/schema.js";
 
 export interface FilePersistResult {
   id: string;
@@ -29,8 +29,8 @@ export async function persistFile(
     // Not installed — fall back to local persistent dir
   }
 
-  // Fallback: copy to ~/.browser/persistent/{date}/{filename}
-  const dataDir = process.env["BROWSER_DATA_DIR"] ?? join(homedir(), ".browser");
+  // Fallback: copy to ~/.hasna/browser/persistent/{date}/{filename}
+  const dataDir = getDataDir();
   const date = new Date().toISOString().split("T")[0];
   const dir = join(dataDir, "persistent", date);
   mkdirSync(dir, { recursive: true });

@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { mkdirSync, existsSync } from "node:fs";
-import { homedir } from "node:os";
+import { getDataDir } from "../db/schema.js";
 import sharp from "sharp";
 import type { GalleryDiffResult } from "../types/index.js";
 
@@ -45,7 +45,7 @@ export async function diffImages(path1: string, path2: string): Promise<GalleryD
     }
   }
 
-  const dataDir = process.env["BROWSER_DATA_DIR"] ?? join(homedir(), ".browser");
+  const dataDir = getDataDir();
   const diffDir = join(dataDir, "diffs");
   mkdirSync(diffDir, { recursive: true });
   const diffPath = join(diffDir, `diff-${Date.now()}.webp`);

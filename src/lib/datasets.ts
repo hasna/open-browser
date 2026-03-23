@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { getDatabase } from "../db/schema.js";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
+import { getDataDir } from "../db/schema.js";
 
 export interface Dataset {
   id: string;
@@ -66,7 +66,7 @@ export function exportDataset(name: string, format: "json" | "csv"): { path: str
   const dataset = getDatasetByName(name);
   if (!dataset) throw new Error(`Dataset '${name}' not found`);
 
-  const dir = join(process.env["BROWSER_DATA_DIR"] ?? join(homedir(), ".browser"), "exports");
+  const dir = join(getDataDir(), "exports");
   mkdirSync(dir, { recursive: true });
 
   const filename = `${name}.${format}`;

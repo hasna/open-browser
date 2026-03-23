@@ -1,12 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { join, basename, extname } from "node:path";
 import { mkdirSync, existsSync, readdirSync, statSync, unlinkSync, copyFileSync, writeFileSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import type { DownloadedFile } from "../types/index.js";
-
-function getDataDir(): string {
-  return process.env["BROWSER_DATA_DIR"] ?? join(homedir(), ".browser");
-}
+import { getDataDir } from "../db/schema.js";
 
 export function getDownloadsDir(sessionId?: string): string {
   const base = join(getDataDir(), "downloads");

@@ -5,9 +5,9 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
+import { getDataDir } from "../db/schema.js";
 
-const PID_FILE = join(process.env["BROWSER_DATA_DIR"] ?? join(homedir(), ".browser"), "daemon.pid");
+const PID_FILE = join(getDataDir(), "daemon.pid");
 const DEFAULT_PORT = 7030;
 
 export function getDaemonPidFile(): string { return PID_FILE; }

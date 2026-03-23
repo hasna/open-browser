@@ -1,7 +1,7 @@
 import type { Page, Cookie } from "playwright";
 import { mkdirSync, existsSync, readdirSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
+import { getDataDir } from "../db/schema.js";
 
 // ─── Profile Types ────────────────────────────────────────────────────────────
 
@@ -23,7 +23,7 @@ export interface ProfileInfo {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getProfilesDir(): string {
-  const dataDir = process.env["BROWSER_DATA_DIR"] ?? join(homedir(), ".browser");
+  const dataDir = getDataDir();
   const dir = join(dataDir, "profiles");
   mkdirSync(dir, { recursive: true });
   return dir;

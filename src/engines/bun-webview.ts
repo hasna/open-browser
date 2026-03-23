@@ -7,7 +7,7 @@
 
 import { join } from "node:path";
 import { mkdirSync } from "node:fs";
-import { homedir } from "node:os";
+import { getDataDir } from "../db/schema.js";
 
 // ─── Availability check ───────────────────────────────────────────────────────
 
@@ -19,7 +19,7 @@ export function isBunWebViewAvailable(): boolean {
 // ─── Profile directory helper ────────────────────────────────────────────────
 
 function getProfileDir(profileName: string): string {
-  const base = process.env["BROWSER_DATA_DIR"] ?? join(homedir(), ".browser");
+  const base = getDataDir();
   const dir = join(base, "profiles", profileName);
   mkdirSync(dir, { recursive: true });
   return dir;
@@ -54,7 +54,7 @@ interface NativeBunWebView {
 export interface BunWebViewOptions {
   width?: number;
   height?: number;
-  profile?: string;          // if set: persistent dataStore at ~/.browser/profiles/{profile}/
+  profile?: string;          // if set: persistent dataStore at ~/.hasna/browser/profiles/{profile}/
   headless?: boolean;        // always headless in current implementation
   userAgent?: string;
   onConsole?: (type: string, ...args: unknown[]) => void;

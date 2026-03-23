@@ -1,10 +1,37 @@
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, existsSync, readdirSync, copyFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 
 export function getDataDir(): string {
-  return process.env["BROWSER_DATA_DIR"] ?? join(homedir(), ".browser");
+  if (process.env["BROWSER_DATA_DIR"]) return process.env["BROWSER_DATA_DIR"];
+
+  const home = process.env["HOME"] || process.env["USERPROFILE"] || homedir();
+  const newDir = join(home, ".hasna", "browser");
+  const oldDir = join(home, ".browser");
+
+  // Auto-migrate: if old dir exists and new doesn't, copy files over
+  if (existsSync(oldDir) && !existsSync(newDir)) {
+    mkdirSync(newDir, { recursive: true });
+    try {
+      for (const file of readdirSync(oldDir)) {
+        const oldPath = join(oldDir, file);
+        const newPath = join(newDir, file);
+        try {
+          if (statSync(oldPath).isFile()) {
+            copyFileSync(oldPath, newPath);
+          }
+        } catch {
+          // Skip files that can't be copied
+        }
+      }
+    } catch {
+      // If we can't read old directory, continue with new
+    }
+  }
+
+  mkdirSync(newDir, { recursive: true });
+  return newDir;
 }
 
 let _db: Database | null = null;

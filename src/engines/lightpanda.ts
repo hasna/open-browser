@@ -14,7 +14,7 @@ export function isLightpandaAvailable(): boolean {
     const paths = [
       "/usr/local/bin/lightpanda",
       "/usr/bin/lightpanda",
-      `${process.env["HOME"]}/.browser/bin/lightpanda`,
+      `${process.env["HOME"]}/.hasna/browser/bin/lightpanda`,
     ];
     return paths.some((p) => {
       try {
@@ -33,7 +33,7 @@ export function getLightpandaBinaryPath(): string {
     "lightpanda",
     "/usr/local/bin/lightpanda",
     "/usr/bin/lightpanda",
-    `${process.env["HOME"]}/.browser/bin/lightpanda`,
+    `${process.env["HOME"]}/.hasna/browser/bin/lightpanda`,
   ];
   for (const p of paths) {
     try {

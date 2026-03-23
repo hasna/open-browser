@@ -1,15 +1,11 @@
 import type { Page } from "playwright";
 import { join } from "node:path";
 import { mkdirSync } from "node:fs";
-import { homedir } from "node:os";
 import sharp from "sharp";
 import type { ScreenshotOptions, ScreenshotResult, PDFOptions, PDFResult } from "../types/index.js";
 import { BrowserError } from "../types/index.js";
 import { createEntry } from "../db/gallery.js";
-
-function getDataDir(): string {
-  return process.env["BROWSER_DATA_DIR"] ?? join(homedir(), ".browser");
-}
+import { getDataDir } from "../db/schema.js";
 
 function getScreenshotDir(projectId?: string): string {
   const base = join(getDataDir(), "screenshots");

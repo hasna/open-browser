@@ -5,10 +5,11 @@
 
 import { mkdirSync, existsSync, readdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import type { Page, BrowserContext } from "playwright";
 
-const STATES_DIR = join(process.env["BROWSER_DATA_DIR"] ?? join(homedir(), ".browser"), "states");
+import { getDataDir } from "../db/schema.js";
+
+const STATES_DIR = join(getDataDir(), "states");
 
 function ensureDir() {
   mkdirSync(STATES_DIR, { recursive: true });
