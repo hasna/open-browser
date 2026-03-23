@@ -1,7 +1,7 @@
 {
   "name": "@hasna/browser",
   "version": "0.3.5",
-  "description": "General-purpose browser agent toolkit — Playwright, Chrome DevTools Protocol, Lightpanda with auto engine selection. CLI + MCP + REST + SDK.",
+  "description": "General-purpose browser agent toolkit \u2014 Playwright, Chrome DevTools Protocol, Lightpanda with auto engine selection. CLI + MCP + REST + SDK.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -34,7 +34,8 @@
     "test": "bun test",
     "dev:cli": "bun run src/cli/index.tsx",
     "dev:mcp": "bun run src/mcp/index.ts",
-    "dev:serve": "bun run src/server/index.ts"
+    "dev:serve": "bun run src/server/index.ts",
+    "postinstall": "mkdir -p $HOME/.hasna/browser/{screenshots,pdfs,states,downloads,profiles,persistent,diffs,exports,scripts} 2>/dev/null || true"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
