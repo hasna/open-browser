@@ -81,6 +81,8 @@ export interface HARCapture {
   stop: () => HAR;
 }
 
+const HAR_MAX_ENTRIES = 5000;
+
 export function startHAR(page: Page): HARCapture {
   const entries: HAREntry[] = [];
   const requestStart = new Map<string, { time: number; method: string; headers: Record<string, string>; postData?: string }>();
@@ -122,7 +124,7 @@ export function startHAR(page: Page): HARCapture {
       timings: { send: 0, wait: duration, receive: 0 },
     };
 
-    entries.push(entry);
+    if (entries.length < HAR_MAX_ENTRIES) entries.push(entry);
   };
 
   const onRequestFailed = (req: Request) => {

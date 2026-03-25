@@ -22,7 +22,8 @@ async function getTodosSDK() {
   }
 }
 
-// In-memory fallback
+// In-memory fallback (bounded — evicts oldest when full)
+const QUEUE_MAX_SIZE = 100;
 const inMemoryQueue: Array<BrowserTask & { id: string; status: "pending"; created_at: string }> = [];
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -55,7 +56,8 @@ export async function queueBrowserTask(task: BrowserTask): Promise<QueuedTask> {
     } catch {}
   }
 
-  // In-memory fallback
+  // In-memory fallback (evict oldest if full)
+  if (inMemoryQueue.length >= QUEUE_MAX_SIZE) inMemoryQueue.shift();
   const id = `btask-${Date.now()}`;
   const entry = { ...task, id, status: "pending" as const, created_at: new Date().toISOString() };
   inMemoryQueue.push(entry);

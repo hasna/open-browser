@@ -425,6 +425,14 @@ export function stopWatch(watchId: string): void {
   }
 }
 
+export function stopAllWatchesForSession(_sessionId?: string): void {
+  // Stop all watches — watches don't track session ownership, so clear everything
+  for (const [id, w] of activeWatches) {
+    clearInterval(w.interval);
+    activeWatches.delete(id);
+  }
+}
+
 // ─── Ref-based actions ────────────────────────────────────────────────────────
 
 export async function clickRef(

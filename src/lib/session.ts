@@ -45,6 +45,23 @@ const ttlInterval = setInterval(async () => {
 // Don't keep the process alive just for TTL cleanup
 if (ttlInterval.unref) ttlInterval.unref();
 
+// ─── Periodic DB pruning — prevent unbounded table growth ──────────────────
+const DB_PRUNE_INTERVAL_MS = 30 * 60_000; // Every 30 minutes
+const DB_RETENTION_HOURS = 24;
+
+const dbPruneInterval = setInterval(() => {
+  try {
+    const { getDatabase } = require("../db/schema.js");
+    const db = getDatabase();
+    const cutoff = new Date(Date.now() - DB_RETENTION_HOURS * 3_600_000).toISOString();
+    // Prune old network_log and console_log entries for closed sessions
+    db.prepare("DELETE FROM network_log WHERE session_id IN (SELECT id FROM sessions WHERE status != 'active') AND timestamp < ?").run(cutoff);
+    db.prepare("DELETE FROM console_log WHERE session_id IN (SELECT id FROM sessions WHERE status != 'active') AND timestamp < ?").run(cutoff);
+    db.prepare("DELETE FROM snapshots WHERE session_id IN (SELECT id FROM sessions WHERE status != 'active') AND timestamp < ?").run(cutoff);
+  } catch {}
+}, DB_PRUNE_INTERVAL_MS);
+if (dbPruneInterval.unref) dbPruneInterval.unref();
+
 // ─── Bun.WebView → Playwright-compatible proxy ───────────────────────────────
 // Wraps BunWebViewSession to satisfy the Page interface expected by the rest of the codebase.
 
@@ -273,6 +290,12 @@ export async function closeSession(sessionId: string): Promise<Session> {
     }
     handles.delete(sessionId);
   }
+
+  // Clean up per-session in-memory caches to prevent leaks
+  try { const { clearLastSnapshot, clearSessionRefs } = await import("./snapshot.js"); clearLastSnapshot(sessionId); clearSessionRefs(sessionId); } catch {}
+  try { const { stopAllWatchesForSession } = await import("./actions.js"); stopAllWatchesForSession(sessionId); } catch {}
+  try { const { clearDialogs } = await import("./dialogs.js"); clearDialogs(sessionId); } catch {}
+
   return dbCloseSession(sessionId);
 }
 

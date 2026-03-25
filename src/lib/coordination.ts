@@ -17,8 +17,18 @@ async function getConversationsSDK() {
   }
 }
 
-// In-memory fallback registry
+// In-memory fallback registry (bounded + swept)
 const activeNavigations = new Map<string, { agentName: string; timestamp: number }>();
+const NAV_MAX_SIZE = 200;
+
+// Sweep expired entries every 2 minutes
+const _navSweeper = setInterval(() => {
+  const cutoff = Date.now() - DUPLICATE_WINDOW_MS;
+  for (const [key, entry] of activeNavigations) {
+    if (entry.timestamp < cutoff) activeNavigations.delete(key);
+  }
+}, 2 * 60_000);
+if (_navSweeper.unref) _navSweeper.unref();
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -43,7 +53,11 @@ export async function announceNavigation(
     } catch {}
   }
 
-  // Always update in-memory registry
+  // Always update in-memory registry (evict oldest if at capacity)
+  if (activeNavigations.size >= NAV_MAX_SIZE && !activeNavigations.has(hostname)) {
+    const firstKey = activeNavigations.keys().next().value;
+    if (firstKey) activeNavigations.delete(firstKey);
+  }
   activeNavigations.set(hostname, { agentName, timestamp: Date.now() });
 }
 

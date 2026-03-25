@@ -27,6 +27,16 @@ async function getMementosSDK() {
 // ─── In-memory fallback (when mementos not available) ────────────────────────
 
 const inMemoryCache = new Map<string, { data: PageMemory; expires: number }>();
+const MEMORY_MAX_SIZE = 200;
+
+// Sweep expired entries every 5 minutes
+const _memorySweeper = setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of inMemoryCache) {
+    if (entry.expires <= now) inMemoryCache.delete(key);
+  }
+}, 5 * 60_000);
+if (_memorySweeper.unref) _memorySweeper.unref();
 
 function cacheKey(url: string): string {
   try {
@@ -64,7 +74,11 @@ export async function rememberPage(
     } catch { /* fall through to in-memory */ }
   }
 
-  // In-memory fallback
+  // In-memory fallback (evict oldest if at capacity)
+  if (inMemoryCache.size >= MEMORY_MAX_SIZE && !inMemoryCache.has(key)) {
+    const firstKey = inMemoryCache.keys().next().value;
+    if (firstKey) inMemoryCache.delete(firstKey);
+  }
   inMemoryCache.set(key, {
     data: memory,
     expires: Date.now() + DEFAULT_TTL_HOURS * 60 * 60 * 1000,
