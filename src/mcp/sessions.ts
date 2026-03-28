@@ -40,7 +40,7 @@ server.tool(
   "browser_session_create",
   "Create a new browser session. If agent_id is set and already has an active session, returns the existing one (use force_new to override). If session_id is omitted on other tools, the single active session is auto-selected. Use cdp_url to attach to an already-running Chrome instance.",
   {
-    engine: z.enum(["playwright", "cdp", "lightpanda", "bun", "auto"]).optional().default("auto"),
+    engine: z.enum(["playwright", "cdp", "lightpanda", "bun", "tui", "auto"]).optional().default("auto"),
     use_case: z.string().optional(),
     project_id: z.string().optional(),
     agent_id: z.string().optional(),

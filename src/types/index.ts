@@ -1,6 +1,6 @@
 // ─── Engine Types ────────────────────────────────────────────────────────────
 
-export type BrowserEngine = "playwright" | "cdp" | "lightpanda" | "bun" | "auto";
+export type BrowserEngine = "playwright" | "cdp" | "lightpanda" | "bun" | "tui" | "auto";
 
 export enum UseCase {
   SCRAPE = "scrape",
@@ -17,6 +17,7 @@ export enum UseCase {
   SCRIPT_INJECT = "script_inject",
   COVERAGE = "coverage",
   RECORD_REPLAY = "record_replay",
+  TERMINAL_TEST = "terminal_test",
 }
 
 // ─── Core Entities ───────────────────────────────────────────────────────────

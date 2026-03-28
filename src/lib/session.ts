@@ -7,6 +7,7 @@ import { launchPlaywright, getPage as getPlaywrightPage, closeBrowser as closePl
 import { connectLightpanda } from "../engines/lightpanda.js";
 import { BunWebViewSession, isBunWebViewAvailable } from "../engines/bun-webview.js";
 import { selectEngine } from "../engines/selector.js";
+import { launchTui, closeTui, type TuiSession } from "../engines/tui.js";
 import { enableNetworkLogging } from "./network.js";
 import { enableConsoleCapture } from "./console.js";
 import { applyStealthPatches } from "./stealth.js";
@@ -17,6 +18,7 @@ import { setupDialogHandler } from "./dialogs.js";
 interface SessionHandle {
   browser: Browser | null;          // null for Bun.WebView sessions
   bunView: BunWebViewSession | null; // non-null for Bun.WebView sessions
+  tuiSession: TuiSession | null;    // non-null for TUI sessions
   page: Page;                        // Playwright Page or BunWebViewSession proxy
   engine: BrowserEngine;
   cleanups: Array<() => void>;
@@ -103,7 +105,7 @@ export async function createSession(opts: SessionOptions = {}): Promise<CreateSe
     }
     try { cleanups.push(setupDialogHandler(page, session.id)); } catch {}
 
-    handles.set(session.id, { browser: cdpBrowser, bunView: null, page, engine: "cdp", cleanups, tokenBudget: { total: 0, used: 0 }, lastActivity: Date.now(), autoGallery: opts.autoGallery ?? false });
+    handles.set(session.id, { browser: cdpBrowser, bunView: null, tuiSession: null, page, engine: "cdp", cleanups, tokenBudget: { total: 0, used: 0 }, lastActivity: Date.now(), autoGallery: opts.autoGallery ?? false });
 
     return { session, page };
   }
@@ -140,6 +142,38 @@ export async function createSession(opts: SessionOptions = {}): Promise<CreateSe
     browser = await connectLightpanda();
     const context = await browser.newContext({ viewport: opts.viewport ?? { width: 1280, height: 720 } });
     page = await context.newPage();
+  } else if (resolvedEngine === "tui") {
+    // ── TUI engine: ttyd + Playwright ──
+    const command = opts.startUrl ?? "bash";
+    const tuiSess = await launchTui(command, {
+      headless: opts.headless ?? true,
+      viewport: opts.viewport,
+    });
+    browser = tuiSess.browser;
+    page = tuiSess.page;
+
+    const session = dbCreateSession({
+      engine: "tui",
+      projectId: opts.projectId,
+      agentId: opts.agentId,
+      startUrl: opts.startUrl,
+      name: opts.name ?? "tui",
+    });
+
+    const cleanups: Array<() => void> = [];
+    cleanups.push(() => closeTui(tuiSess));
+
+    if (opts.captureNetwork !== false) {
+      try { cleanups.push(enableNetworkLogging(page, session.id)); } catch {}
+    }
+    if (opts.captureConsole !== false) {
+      try { cleanups.push(enableConsoleCapture(page, session.id)); } catch {}
+    }
+    try { cleanups.push(setupDialogHandler(page, session.id)); } catch {}
+
+    handles.set(session.id, { browser, bunView: null, tuiSession: tuiSess, page, engine: "tui", cleanups, tokenBudget: { total: 0, used: 0 }, lastActivity: Date.now(), autoGallery: opts.autoGallery ?? false });
+
+    return { session, page };
   } else {
     // playwright or cdp both use Playwright under the hood — use shared pool
     browser = await pool.acquire(opts.headless ?? true);
@@ -206,7 +240,7 @@ export async function createSession(opts: SessionOptions = {}): Promise<CreateSe
     }
   }
 
-  handles.set(session.id, { browser, bunView, page, engine: bunView ? "bun" : resolvedEngine, cleanups, tokenBudget: { total: 0, used: 0 }, lastActivity: Date.now(), autoGallery: opts.autoGallery ?? false });
+  handles.set(session.id, { browser, bunView, tuiSession: null, page, engine: bunView ? "bun" : resolvedEngine, cleanups, tokenBudget: { total: 0, used: 0 }, lastActivity: Date.now(), autoGallery: opts.autoGallery ?? false });
 
   if (opts.startUrl) {
     try {
@@ -284,6 +318,8 @@ export async function closeSession(sessionId: string): Promise<Session> {
     }
     if (handle.bunView) {
       try { await handle.bunView.close(); } catch {}
+    } else if (handle.tuiSession) {
+      // TUI cleanup is handled via cleanups array (closeTui)
     } else {
       try { await handle.page.context().close(); } catch {}
       if (handle.browser) pool.release(handle.browser);

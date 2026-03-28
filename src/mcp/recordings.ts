@@ -159,7 +159,7 @@ server.tool(
     max_pages: z.number().optional().default(50),
     same_domain: z.boolean().optional().default(true),
     project_id: z.string().optional(),
-    engine: z.enum(["playwright", "cdp", "lightpanda", "bun", "auto"]).optional().default("auto"),
+    engine: z.enum(["playwright", "cdp", "lightpanda", "bun", "tui", "auto"]).optional().default("auto"),
   },
   async ({ url, max_depth, max_pages, same_domain, project_id, engine }) => {
     try {

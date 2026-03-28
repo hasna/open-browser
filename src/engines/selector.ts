@@ -2,6 +2,7 @@ import type { BrowserEngine } from "../types/index.js";
 import { UseCase } from "../types/index.js";
 import { isLightpandaAvailable } from "./lightpanda.js";
 import { isBunWebViewAvailable } from "./bun-webview.js";
+import { isTuiAvailable } from "./tui.js";
 
 // ─── Engine Decision Table ────────────────────────────────────────────────────
 //
@@ -22,6 +23,8 @@ const ENGINE_MAP: Record<UseCase, BrowserEngine> = {
   [UseCase.AUTH_FLOW]:       "playwright",
   [UseCase.MULTI_TAB]:       "playwright",
   [UseCase.RECORD_REPLAY]:   "playwright",
+  // TUI testing via ttyd + Playwright
+  [UseCase.TERMINAL_TEST]:   "tui",
   // CDP for low-level DevTools
   [UseCase.NETWORK_MONITOR]: "cdp",
   [UseCase.HAR_CAPTURE]:     "cdp",
@@ -70,6 +73,7 @@ export function isEngineAvailable(engine: BrowserEngine): boolean {
   if (engine === "playwright") return true;
   if (engine === "cdp") return true;
   if (engine === "lightpanda") return isLightpandaAvailable();
+  if (engine === "tui") return isTuiAvailable();
   return false;
 }
 
@@ -100,6 +104,8 @@ export function inferUseCase(label: string): UseCase {
     coverage: UseCase.COVERAGE,
     record: UseCase.RECORD_REPLAY,
     replay: UseCase.RECORD_REPLAY,
+    terminal: UseCase.TERMINAL_TEST,
+    tui: UseCase.TERMINAL_TEST,
   };
   return map[label.toLowerCase()] ?? UseCase.SPA_NAVIGATE;
 }

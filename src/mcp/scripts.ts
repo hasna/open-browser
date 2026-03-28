@@ -21,7 +21,7 @@ server.tool(
   {
     name: z.string().describe("Script name"),
     session_id: z.string().optional(),
-    engine: z.enum(["playwright", "cdp", "lightpanda", "bun", "auto"]).optional().default("auto"),
+    engine: z.enum(["playwright", "cdp", "lightpanda", "bun", "tui", "auto"]).optional().default("auto"),
     variables: z.record(z.string()).optional().describe("Override script variables"),
   },
   async ({ name, session_id, engine, variables }) => {
