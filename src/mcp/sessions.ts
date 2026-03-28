@@ -72,9 +72,11 @@ TIPS:
     tags: z.array(z.string()).optional(),
     cdp_url: z.string().optional().describe("Connect to existing Chrome via CDP (e.g. http://localhost:9222). Start Chrome with --remote-debugging-port=9222"),
     tui_theme: z.enum(["dark", "light", "system"]).optional().default("system")
-      .describe("TUI engine only: terminal color theme. 'system' auto-detects OS dark/light mode. Choose 'light' for light backgrounds or 'dark' for dark backgrounds. AI agents should pick based on readability needs."),
+      .describe("TUI engine only: terminal color theme. 'system' auto-detects OS dark/light mode. Choose 'light' for light backgrounds or 'dark' for dark backgrounds."),
+    tui_font_size: z.number().optional().default(14)
+      .describe("TUI engine only: terminal font size in pixels (default: 14). Larger = more readable screenshots, smaller = more content visible."),
   },
-  async ({ engine, use_case, project_id, agent_id, start_url, headless, viewport_width, viewport_height, stealth, auto_gallery, storage_state, force_new, tags, cdp_url, tui_theme }) => {
+  async ({ engine, use_case, project_id, agent_id, start_url, headless, viewport_width, viewport_height, stealth, auto_gallery, storage_state, force_new, tags, cdp_url, tui_theme, tui_font_size }) => {
     try {
       // Auto-reuse: if agent already has an active session, return it
       if (agent_id && !force_new) {
@@ -94,6 +96,7 @@ TIPS:
         storageState: storage_state,
         cdpUrl: cdp_url,
         tuiTheme: tui_theme as "dark" | "light" | "system" | undefined,
+        tuiFontSize: tui_font_size,
       });
       // Apply tags if provided
       if (tags?.length) {

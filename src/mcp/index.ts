@@ -10,6 +10,7 @@ import { register as registerActions } from "./actions.js";
 import { register as registerCapture } from "./capture.js";
 import { register as registerNetwork } from "./network.js";
 import { register as registerData } from "./data.js";
+import { register as registerTui } from "./tui.js";
 
 const _pkg = JSON.parse(readFileSync(join(import.meta.dir, "../../package.json"), "utf8")) as { version: string };
 
@@ -23,6 +24,7 @@ registerActions(server);
 registerCapture(server);
 registerNetwork(server);
 registerData(server);
+registerTui(server);
 
 // --- send_feedback tool ---
 import { z } from "zod";

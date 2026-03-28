@@ -81,6 +81,7 @@ export interface SessionOptions {
   cdpUrl?: string;             // Connect to existing Chrome via CDP (e.g. http://localhost:9222)
   storageState?: string;        // Name of a saved storage state to load (restores cookies/auth)
   tuiTheme?: "dark" | "light" | "system";  // TUI engine only: terminal color theme (default: "system")
+  tuiFontSize?: number;                    // TUI engine only: terminal font size in px (default: 14)
 }
 
 // ─── Snapshot ────────────────────────────────────────────────────────────────

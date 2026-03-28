@@ -541,6 +541,18 @@ server.tool(
           { tool: "browser_tab_switch", description: "Switch to a tab by index" },
           { tool: "browser_tab_close", description: "Close a tab by index" },
         ],
+        TUI: [
+          { tool: "browser_tui_send_keys", description: "Send keystrokes (ctrl+c, arrow_up, tab, enter, etc.)" },
+          { tool: "browser_tui_send_text", description: "Type text + optional Enter (most common TUI interaction)" },
+          { tool: "browser_tui_resize", description: "Resize terminal cols/rows mid-session" },
+          { tool: "browser_tui_get_text", description: "Get terminal text buffer (full or row range)" },
+          { tool: "browser_tui_wait_for_text", description: "Wait for text to appear in terminal output" },
+          { tool: "browser_tui_get_cursor", description: "Get cursor position (row, col)" },
+          { tool: "browser_tui_assert", description: "Assert terminal conditions (text contains, row N contains, cursor at)" },
+          { tool: "browser_tui_snapshot", description: "Structured terminal snapshot (rows array, cursor, dimensions)" },
+          { tool: "browser_tui_record_start", description: "Start recording terminal as asciicast" },
+          { tool: "browser_tui_record_stop", description: "Stop recording, return asciicast v2 JSON" },
+        ],
         Meta: [
           { tool: "browser_check", description: "RECOMMENDED: One-call page summary with diagnostics" },
           { tool: "browser_version", description: "Show running binary version and tool count" },

@@ -149,6 +149,7 @@ export async function createSession(opts: SessionOptions = {}): Promise<CreateSe
       headless: opts.headless ?? true,
       viewport: opts.viewport,
       theme: opts.tuiTheme ?? "system",
+      fontSize: opts.tuiFontSize,
     });
     browser = tuiSess.browser;
     page = tuiSess.page;

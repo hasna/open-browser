@@ -129,6 +129,7 @@ export async function launchTui(
     headless?: boolean;
     viewport?: { width: number; height: number };
     theme?: TuiTheme;
+    fontSize?: number;
   } = {}
 ): Promise<TuiSession> {
   if (!isTuiAvailable()) {
@@ -210,6 +211,14 @@ export async function launchTui(
       const viewport = document.querySelector(".xterm-viewport") as HTMLElement;
       if (viewport) viewport.style.backgroundColor = theme.background;
     }, themeColors);
+
+    // Apply font size if specified
+    if (options.fontSize) {
+      await page.evaluate((size: number) => {
+        const term = (window as any).term ?? (window as any).terminal;
+        if (term?.options) term.options.fontSize = size;
+      }, options.fontSize);
+    }
 
     return { ttydProcess, port, browser, page, theme: resolvedTheme };
   } catch (err) {
