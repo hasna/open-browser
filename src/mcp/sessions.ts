@@ -38,13 +38,30 @@ export function register(server: McpServer) {
 
 server.tool(
   "browser_session_create",
-  "Create a new browser session. If agent_id is set and already has an active session, returns the existing one (use force_new to override). If session_id is omitted on other tools, the single active session is auto-selected. Use cdp_url to attach to an already-running Chrome instance.",
+  `Create a new browser session. Returns a session object with an id you must pass to other tools.
+
+ENGINES:
+- "auto" (default): picks the best engine for your use case automatically
+- "playwright": full browser automation — forms, SPAs, auth flows, multi-tab
+- "cdp": Chrome DevTools Protocol — network monitoring, perf profiling, script injection
+- "lightpanda": fast headless for static pages
+- "bun": native Bun.WebView — fastest for screenshots and scraping
+- "tui": terminal UI testing — launches a CLI/TUI app (Ink, Blessed, Bubbletea, etc.) via ttyd and connects Playwright to it. Pass the shell command as start_url (e.g. "htop", "bun run app.tsx"). All browser tools (screenshot, click, type, wait) work on the terminal. Use tui_theme to control dark/light appearance.
+
+TIPS:
+- If agent_id is set and already has an active session, returns the existing one (use force_new to override)
+- If session_id is omitted on other tools, the single active session is auto-selected
+- Use cdp_url to attach to an already-running Chrome instance
+- For TUI sessions: start_url is the shell command to run, NOT a URL`,
   {
-    engine: z.enum(["playwright", "cdp", "lightpanda", "bun", "tui", "auto"]).optional().default("auto"),
-    use_case: z.string().optional(),
+    engine: z.enum(["playwright", "cdp", "lightpanda", "bun", "tui", "auto"]).optional().default("auto")
+      .describe("Browser engine. Use 'tui' for terminal/CLI app testing — pass the command as start_url"),
+    use_case: z.string().optional()
+      .describe("Hint for auto engine selection: scrape, screenshot, form, auth, network, har, perf, terminal, tui"),
     project_id: z.string().optional(),
     agent_id: z.string().optional(),
-    start_url: z.string().optional(),
+    start_url: z.string().optional()
+      .describe("URL to navigate to, OR for engine='tui': the shell command to run (e.g. 'htop', 'bun run app.tsx')"),
     headless: z.boolean().optional().default(true),
     viewport_width: z.number().optional().default(1280),
     viewport_height: z.number().optional().default(720),
@@ -54,8 +71,10 @@ server.tool(
     force_new: z.boolean().optional().default(false).describe("Force create a new session even if agent already has one"),
     tags: z.array(z.string()).optional(),
     cdp_url: z.string().optional().describe("Connect to existing Chrome via CDP (e.g. http://localhost:9222). Start Chrome with --remote-debugging-port=9222"),
+    tui_theme: z.enum(["dark", "light", "system"]).optional().default("system")
+      .describe("TUI engine only: terminal color theme. 'system' auto-detects OS dark/light mode. Choose 'light' for light backgrounds or 'dark' for dark backgrounds. AI agents should pick based on readability needs."),
   },
-  async ({ engine, use_case, project_id, agent_id, start_url, headless, viewport_width, viewport_height, stealth, auto_gallery, storage_state, force_new, tags, cdp_url }) => {
+  async ({ engine, use_case, project_id, agent_id, start_url, headless, viewport_width, viewport_height, stealth, auto_gallery, storage_state, force_new, tags, cdp_url, tui_theme }) => {
     try {
       // Auto-reuse: if agent already has an active session, return it
       if (agent_id && !force_new) {
@@ -74,6 +93,7 @@ server.tool(
         autoGallery: auto_gallery,
         storageState: storage_state,
         cdpUrl: cdp_url,
+        tuiTheme: tui_theme as "dark" | "light" | "system" | undefined,
       });
       // Apply tags if provided
       if (tags?.length) {

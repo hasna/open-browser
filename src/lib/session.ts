@@ -148,6 +148,7 @@ export async function createSession(opts: SessionOptions = {}): Promise<CreateSe
     const tuiSess = await launchTui(command, {
       headless: opts.headless ?? true,
       viewport: opts.viewport,
+      theme: opts.tuiTheme ?? "system",
     });
     browser = tuiSess.browser;
     page = tuiSess.page;

@@ -80,6 +80,7 @@ export interface SessionOptions {
   autoGallery?: boolean;       // default: false — auto-save screenshot to gallery on every navigate
   cdpUrl?: string;             // Connect to existing Chrome via CDP (e.g. http://localhost:9222)
   storageState?: string;        // Name of a saved storage state to load (restores cookies/auth)
+  tuiTheme?: "dark" | "light" | "system";  // TUI engine only: terminal color theme (default: "system")
 }
 
 // ─── Snapshot ────────────────────────────────────────────────────────────────

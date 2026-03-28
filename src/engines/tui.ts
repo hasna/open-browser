@@ -11,12 +11,63 @@ import { launchPlaywright, getPage as getPlaywrightPage } from "./playwright.js"
 const DEFAULT_TTYD_PORT_START = 7780;
 let nextPort = DEFAULT_TTYD_PORT_START;
 
+export type TuiTheme = "dark" | "light" | "system";
+
 export interface TuiSession {
   ttydProcess: ChildProcess;
   port: number;
   browser: Browser;
   page: Page;
+  theme: TuiTheme;
 }
+
+// xterm.js theme presets
+const THEMES = {
+  dark: {
+    background: "#1e1e1e",
+    foreground: "#d4d4d4",
+    cursor: "#d4d4d4",
+    selectionBackground: "#264f78",
+    black: "#1e1e1e",
+    red: "#f44747",
+    green: "#6a9955",
+    yellow: "#d7ba7d",
+    blue: "#569cd6",
+    magenta: "#c586c0",
+    cyan: "#4ec9b0",
+    white: "#d4d4d4",
+    brightBlack: "#808080",
+    brightRed: "#f44747",
+    brightGreen: "#6a9955",
+    brightYellow: "#d7ba7d",
+    brightBlue: "#569cd6",
+    brightMagenta: "#c586c0",
+    brightCyan: "#4ec9b0",
+    brightWhite: "#ffffff",
+  },
+  light: {
+    background: "#ffffff",
+    foreground: "#1e1e1e",
+    cursor: "#1e1e1e",
+    selectionBackground: "#add6ff",
+    black: "#1e1e1e",
+    red: "#cd3131",
+    green: "#008000",
+    yellow: "#795e26",
+    blue: "#0451a5",
+    magenta: "#af00db",
+    cyan: "#0598bc",
+    white: "#d4d4d4",
+    brightBlack: "#808080",
+    brightRed: "#cd3131",
+    brightGreen: "#008000",
+    brightYellow: "#795e26",
+    brightBlue: "#0451a5",
+    brightMagenta: "#af00db",
+    brightCyan: "#0598bc",
+    brightWhite: "#ffffff",
+  },
+};
 
 /**
  * Check if ttyd is installed on this system.
@@ -77,6 +128,7 @@ export async function launchTui(
   options: {
     headless?: boolean;
     viewport?: { width: number; height: number };
+    theme?: TuiTheme;
   } = {}
 ): Promise<TuiSession> {
   if (!isTuiAvailable()) {
@@ -125,7 +177,41 @@ export async function launchTui(
     // Wait for the terminal to render (xterm.js initialization)
     await page.waitForSelector(".xterm-screen", { timeout: 10_000 });
 
-    return { ttydProcess, port, browser, page };
+    // Apply theme — resolve "system" by checking macOS appearance (not the browser, which defaults to dark in headless)
+    let resolvedTheme: "dark" | "light" = "dark";
+    const requestedTheme = options.theme ?? "system";
+    if (requestedTheme === "light") {
+      resolvedTheme = "light";
+    } else if (requestedTheme === "dark") {
+      resolvedTheme = "dark";
+    } else {
+      // "system" — detect actual OS preference
+      try {
+        const result = execSync("defaults read -g AppleInterfaceStyle 2>/dev/null", { encoding: "utf8" }).trim();
+        resolvedTheme = result === "Dark" ? "dark" : "light";
+      } catch {
+        // Command fails when system is in light mode (key doesn't exist)
+        resolvedTheme = "light";
+      }
+    }
+
+    // Apply xterm.js theme via the terminal API
+    const themeColors = THEMES[resolvedTheme];
+    await page.evaluate((theme) => {
+      const term = (window as any).term ?? (window as any).terminal;
+      if (term?.options) {
+        term.options.theme = theme;
+      }
+      // Also set the page background to match
+      document.body.style.backgroundColor = theme.background;
+      const container = document.getElementById("terminal-container");
+      if (container) container.style.backgroundColor = theme.background;
+      // Update xterm viewport background
+      const viewport = document.querySelector(".xterm-viewport") as HTMLElement;
+      if (viewport) viewport.style.backgroundColor = theme.background;
+    }, themeColors);
+
+    return { ttydProcess, port, browser, page, theme: resolvedTheme };
   } catch (err) {
     // Cleanup on failure
     ttydProcess.kill();
