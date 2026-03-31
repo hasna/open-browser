@@ -15,6 +15,14 @@ export function createSession(data: CreateSessionData): Session {
   const db = getDatabase();
   const id = randomUUID();
 
+  // Auto-register agent if agent_id is provided but doesn't exist (prevents FK failure)
+  if (data.agentId) {
+    const exists = db.query<{ id: string }, string>("SELECT id FROM agents WHERE id = ?").get(data.agentId);
+    if (!exists) {
+      db.prepare("INSERT INTO agents (id, name) VALUES (?, ?)").run(data.agentId, data.agentId);
+    }
+  }
+
   // If a name is requested but already taken, fall back to name-{short_id}
   let name = data.name ?? null;
   if (name) {
